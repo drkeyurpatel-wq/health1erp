@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone, Mail, Calendar, Droplets, AlertCircle, BedDouble, Edit } from "lucide-react";
+import { Phone, Mail, Calendar, Droplets, AlertCircle, BedDouble, Edit, FileHeart } from "lucide-react";
 import { EmptyState } from "@/components/common/empty-state";
 import api from "@/lib/api";
 import { formatDate, formatDateTime, formatCurrency } from "@/lib/utils";
@@ -70,7 +70,8 @@ export default function PatientDetailPage() {
               )}
             </div>
             <div className="flex gap-2 shrink-0">
-              <Link href={`/ipd/admit?patient=${id}`}><Button size="sm" variant="gradient"><BedDouble className="h-4 w-4 mr-1" />Admit</Button></Link>
+              <Link href={`/emr/${id}`}><Button size="sm" variant="gradient"><FileHeart className="h-4 w-4 mr-1" />Open EMR</Button></Link>
+              <Link href={`/ipd/admit?patient=${id}`}><Button size="sm" variant="default"><BedDouble className="h-4 w-4 mr-1" />Admit</Button></Link>
               <Button size="sm" variant="outline"><Edit className="h-4 w-4 mr-1" />Edit</Button>
             </div>
           </div>
