@@ -1,3 +1,4 @@
+from app.models.organization import Organization, Facility
 from app.models.user import User
 from app.models.patient import Patient
 from app.models.appointment import Appointment
@@ -12,6 +13,7 @@ from app.models.ot import OTBooking, OTRoom
 from app.models.audit import AuditLog
 
 __all__ = [
+    "Organization", "Facility",
     "User", "Patient", "Appointment",
     "Admission", "Bed", "Ward", "DoctorRound", "NursingAssessment", "DischargePlanning",
     "Bill", "BillItem", "Payment", "InsuranceClaim",
