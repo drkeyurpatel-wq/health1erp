@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Calendar, BedDouble, Receipt,
   Package, Pill, FlaskConical, ScanLine, Scissors,
-  BarChart3, Brain, Settings, LogOut, Heart,
+  BarChart3, Settings, LogOut, Heart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth-store";
@@ -22,6 +22,8 @@ const navItems = [
   { href: "/radiology", label: "Radiology", icon: ScanLine },
   { href: "/ot", label: "Operation Theatre", icon: Scissors },
   { href: "/reports", label: "Reports", icon: BarChart3 },
+  { href: "/hr", label: "HR & Staff", icon: Users },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {
