@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth, patients, appointments, ipd, billing,
     inventory, pharmacy, laboratory, radiology, ot,
-    reports, ai, audit,
+    reports, ai, audit, organizations,
 )
 
 api_router = APIRouter()
@@ -21,3 +21,4 @@ api_router.include_router(ot.router, prefix="/ot", tags=["Operation Theatre"])
 api_router.include_router(reports.router, prefix="/reports", tags=["Reports"])
 api_router.include_router(ai.router, prefix="/ai", tags=["AI & CDSS"])
 api_router.include_router(audit.router, prefix="/audit", tags=["Audit Logs"])
+api_router.include_router(organizations.router, prefix="/organizations", tags=["Organizations & Facilities"])
