@@ -1,0 +1,43 @@
+{
+  "nav": {
+    "dashboard": "لوحة القيادة",
+    "patients": "المرضى",
+    "appointments": "المواعيد",
+    "ipd": "قسم المرضى الداخليين",
+    "billing": "الفواتير",
+    "inventory": "المخزون",
+    "pharmacy": "الصيدلية",
+    "laboratory": "المختبر",
+    "radiology": "الأشعة",
+    "ot": "غرفة العمليات",
+    "reports": "التقارير"
+  },
+  "actions": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "view": "عرض",
+    "search": "بحث",
+    "admit": "قبول مريض",
+    "discharge": "خروج",
+    "transfer": "نقل"
+  },
+  "ipd": {
+    "total_admitted": "إجمالي المقبولين",
+    "occupancy_rate": "معدل الإشغال",
+    "discharges_today": "الخروج اليوم",
+    "critical_patients": "مرضى حرجين",
+    "bed_management": "إدارة الأسرة",
+    "ai_risk_score": "درجة المخاطر الذكية",
+    "discharge_summary": "ملخص الخروج"
+  },
+  "status": {
+    "admitted": "مقبول",
+    "discharged": "خرج",
+    "available": "متاح",
+    "occupied": "مشغول",
+    "pending": "قيد الانتظار",
+    "completed": "مكتمل"
+  }
+}

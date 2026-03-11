@@ -1,0 +1,43 @@
+{
+  "nav": {
+    "dashboard": "डैशबोर्ड",
+    "patients": "मरीज़",
+    "appointments": "अपॉइंटमेंट",
+    "ipd": "आईपीडी - इनपेशेंट",
+    "billing": "बिलिंग",
+    "inventory": "इन्वेंटरी",
+    "pharmacy": "फार्मेसी",
+    "laboratory": "प्रयोगशाला",
+    "radiology": "रेडियोलॉजी",
+    "ot": "ऑपरेशन थिएटर",
+    "reports": "रिपोर्ट"
+  },
+  "actions": {
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "delete": "हटाएं",
+    "edit": "संपादित करें",
+    "view": "देखें",
+    "search": "खोजें",
+    "admit": "मरीज़ भर्ती करें",
+    "discharge": "छुट्टी",
+    "transfer": "स्थानांतरण"
+  },
+  "ipd": {
+    "total_admitted": "कुल भर्ती",
+    "occupancy_rate": "अधिभोग दर",
+    "discharges_today": "आज की छुट्टियां",
+    "critical_patients": "गंभीर मरीज़",
+    "bed_management": "बेड प्रबंधन",
+    "ai_risk_score": "AI जोखिम स्कोर",
+    "discharge_summary": "डिस्चार्ज सारांश"
+  },
+  "status": {
+    "admitted": "भर्ती",
+    "discharged": "छुट्टी",
+    "available": "उपलब्ध",
+    "occupied": "व्यस्त",
+    "pending": "लंबित",
+    "completed": "पूर्ण"
+  }
+}

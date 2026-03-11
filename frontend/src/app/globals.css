@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --border: #e2e8f0;
+  --sidebar-width: 260px;
+}
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+@layer components {
+  .stat-card {
+    @apply bg-white rounded-xl p-6 shadow-sm border border-gray-100;
+  }
+  .page-header {
+    @apply mb-6 flex items-center justify-between;
+  }
+  .page-title {
+    @apply text-2xl font-bold text-gray-900;
+  }
+  .risk-badge-low { @apply bg-green-100 text-green-800; }
+  .risk-badge-medium { @apply bg-yellow-100 text-yellow-800; }
+  .risk-badge-high { @apply bg-red-100 text-red-800; }
+}

@@ -1,0 +1,46 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "patients": "Patients",
+    "appointments": "Appointments",
+    "ipd": "IPD - Inpatient",
+    "billing": "Billing",
+    "inventory": "Inventory",
+    "pharmacy": "Pharmacy",
+    "laboratory": "Laboratory",
+    "radiology": "Radiology",
+    "ot": "Operation Theatre",
+    "reports": "Reports"
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
+    "print": "Print",
+    "admit": "Admit Patient",
+    "discharge": "Discharge",
+    "transfer": "Transfer"
+  },
+  "ipd": {
+    "total_admitted": "Total Admitted",
+    "occupancy_rate": "Occupancy Rate",
+    "discharges_today": "Discharges Today",
+    "critical_patients": "Critical Patients",
+    "bed_management": "Bed Management",
+    "ai_risk_score": "AI Risk Score",
+    "discharge_summary": "Discharge Summary"
+  },
+  "status": {
+    "admitted": "Admitted",
+    "discharged": "Discharged",
+    "available": "Available",
+    "occupied": "Occupied",
+    "pending": "Pending",
+    "completed": "Completed"
+  }
+}

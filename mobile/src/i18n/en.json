@@ -1,0 +1,16 @@
+{
+  "dashboard": "Dashboard",
+  "patients": "Patients",
+  "appointments": "Appointments",
+  "ipd": "IPD",
+  "admitted": "Admitted",
+  "occupancy": "Occupancy",
+  "critical": "Critical",
+  "admit_patient": "Admit Patient",
+  "discharge": "Discharge",
+  "vitals": "Vitals",
+  "ai_risk": "AI Risk Score",
+  "nursing_assessment": "Nursing Assessment",
+  "save": "Save",
+  "cancel": "Cancel"
+}
