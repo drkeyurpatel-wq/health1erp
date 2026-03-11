@@ -11,6 +11,15 @@ build/
 # Environment
 .env
 .env.local
+.env.production
+.env.staging
+
+# Secrets & certificates
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
 
 # Node
 node_modules/
