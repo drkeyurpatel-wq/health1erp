@@ -9,6 +9,7 @@ from app.models.pharmacy import Prescription, PrescriptionItem, Dispensation
 from app.models.laboratory import LabTest, LabOrder, LabResult
 from app.models.radiology import RadiologyExam, RadiologyOrder, RadiologyReport
 from app.models.ot import OTBooking, OTRoom
+from app.models.audit import AuditLog
 
 __all__ = [
     "User", "Patient", "Appointment",
@@ -20,4 +21,5 @@ __all__ = [
     "LabTest", "LabOrder", "LabResult",
     "RadiologyExam", "RadiologyOrder", "RadiologyReport",
     "OTBooking", "OTRoom",
+    "AuditLog",
 ]

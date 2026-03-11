@@ -2,16 +2,18 @@ import random
 import string
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import PaginationParams, RoleChecker, get_current_active_user
+from app.models.audit import AuditAction
 from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
 from app.schemas.patient import PatientCreate, PatientResponse, PatientUpdate
+from app.services import audit_service
 
 router = APIRouter()
 
@@ -57,6 +59,7 @@ async def list_patients(
 @router.post("", response_model=PatientResponse, status_code=201)
 async def create_patient(
     data: PatientCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(RoleChecker("patients:write")),
 ):
@@ -64,6 +67,18 @@ async def create_patient(
     db.add(patient)
     await db.flush()
     await db.refresh(patient)
+    await audit_service.log_action(
+        db=db,
+        user=user,
+        action=AuditAction.CREATE,
+        resource_type="patient",
+        resource_id=str(patient.id),
+        resource_name=f"{patient.first_name} {patient.last_name}",
+        module="patients",
+        description=f"Created patient {patient.first_name} {patient.last_name} (UHID: {patient.uhid})",
+        is_sensitive=True,
+        request=request,
+    )
     return patient
 
 
@@ -84,6 +99,7 @@ async def get_patient(
 async def update_patient(
     patient_id: UUID,
     data: PatientUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(RoleChecker("patients:write")),
 ):
@@ -91,10 +107,32 @@ async def update_patient(
     patient = result.scalar_one_or_none()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+
+    # Track changes for audit log
+    changes = {}
     for field, value in data.model_dump(exclude_unset=True).items():
+        old_value = getattr(patient, field)
+        if old_value != value:
+            changes[field] = {"old": old_value, "new": value}
         setattr(patient, field, value)
+
     await db.flush()
     await db.refresh(patient)
+
+    if changes:
+        await audit_service.log_action(
+            db=db,
+            user=user,
+            action=AuditAction.UPDATE,
+            resource_type="patient",
+            resource_id=str(patient.id),
+            resource_name=f"{patient.first_name} {patient.last_name}",
+            changes=changes,
+            module="patients",
+            description=f"Updated patient {patient.first_name} {patient.last_name}: {', '.join(changes.keys())}",
+            is_sensitive=True,
+            request=request,
+        )
     return patient
 
 

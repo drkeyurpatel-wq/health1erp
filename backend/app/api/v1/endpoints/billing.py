@@ -3,18 +3,20 @@ import string
 from datetime import date, datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import PaginationParams, RoleChecker
+from app.models.audit import AuditAction
 from app.models.billing import Bill, BillItem, BillStatus, InsuranceClaim, Payment
 from app.models.user import User
 from app.schemas.billing import (
     BillCreate, BillResponse, InsuranceClaimCreate, InsuranceClaimResponse,
     PaymentCreate, PaymentResponse,
 )
+from app.services import audit_service
 
 router = APIRouter()
 
@@ -55,6 +57,7 @@ async def list_bills(
 @router.post("/generate", response_model=BillResponse, status_code=201)
 async def generate_bill(
     data: BillCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(RoleChecker("billing:write")),
 ):
@@ -104,6 +107,18 @@ async def generate_bill(
 
     await db.flush()
     await db.refresh(bill)
+
+    await audit_service.log_action(
+        db=db,
+        user=user,
+        action=AuditAction.CREATE,
+        resource_type="bill",
+        resource_id=str(bill.id),
+        resource_name=bill.bill_number,
+        module="billing",
+        description=f"Generated bill {bill.bill_number} for patient {data.patient_id}, total: {bill.total_amount}",
+        request=request,
+    )
     return bill
 
 
@@ -111,6 +126,7 @@ async def generate_bill(
 async def record_payment(
     bill_id: UUID,
     data: PaymentCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(RoleChecker("billing:write")),
 ):
@@ -138,6 +154,23 @@ async def record_payment(
 
     await db.flush()
     await db.refresh(payment)
+
+    await audit_service.log_action(
+        db=db,
+        user=user,
+        action=AuditAction.CREATE,
+        resource_type="payment",
+        resource_id=str(payment.id),
+        resource_name=payment.receipt_number,
+        changes={
+            "bill_status": {"old": "Pending", "new": bill.status.value},
+            "paid_amount": {"old": float(bill.paid_amount - data.amount), "new": float(bill.paid_amount)},
+            "balance": {"old": float(bill.balance + data.amount), "new": float(bill.balance)},
+        },
+        module="billing",
+        description=f"Recorded payment of {data.amount} for bill {bill.bill_number} (receipt: {payment.receipt_number})",
+        request=request,
+    )
     return payment
 
 

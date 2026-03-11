@@ -1,18 +1,20 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import RoleChecker
+from app.models.audit import AuditAction
 from app.models.pharmacy import Dispensation, Prescription, PrescriptionItem, PrescriptionStatus
 from app.models.inventory import Item
 from app.models.user import User
 from app.schemas.pharmacy import (
     DispensationCreate, DrugInteractionResponse, PrescriptionCreate, PrescriptionResponse,
 )
+from app.services import audit_service
 
 router = APIRouter()
 
@@ -20,6 +22,7 @@ router = APIRouter()
 @router.post("/prescriptions", response_model=PrescriptionResponse, status_code=201)
 async def create_prescription(
     data: PrescriptionCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(RoleChecker("pharmacy:prescribe")),
 ):
@@ -38,6 +41,18 @@ async def create_prescription(
 
     await db.flush()
     await db.refresh(prescription)
+
+    await audit_service.log_action(
+        db=db,
+        user=user,
+        action=AuditAction.CREATE,
+        resource_type="prescription",
+        resource_id=str(prescription.id),
+        module="pharmacy",
+        description=f"Created prescription for patient {data.patient_id} with {len(data.items)} item(s)",
+        is_sensitive=True,
+        request=request,
+    )
     return prescription
 
 
@@ -56,6 +71,7 @@ async def get_pending_prescriptions(
 @router.post("/dispense")
 async def dispense_medication(
     data: DispensationCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(RoleChecker("pharmacy:dispense")),
 ):
@@ -85,6 +101,19 @@ async def dispense_medication(
     db.add(dispensation)
     prescription.status = PrescriptionStatus.Dispensed
     await db.flush()
+
+    await audit_service.log_action(
+        db=db,
+        user=user,
+        action=AuditAction.UPDATE,
+        resource_type="prescription",
+        resource_id=str(data.prescription_id),
+        changes={"status": {"old": "Active", "new": "Dispensed"}},
+        module="pharmacy",
+        description=f"Dispensed prescription {data.prescription_id}",
+        is_sensitive=True,
+        request=request,
+    )
     return {"message": "Medication dispensed successfully"}
 
 
