@@ -150,9 +150,9 @@ export default function LoginPage() {
             <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-100">
               <p className="text-xs font-medium text-gray-500 mb-2">Demo Credentials</p>
               <div className="space-y-1 text-xs text-gray-600">
-                <p><span className="font-medium">Admin:</span> admin@health1erp.com / admin123</p>
-                <p><span className="font-medium">Doctor:</span> doctor@health1erp.com / doctor123</p>
-                <p><span className="font-medium">Nurse:</span> nurse@health1erp.com / nurse123</p>
+                <p><span className="font-medium">Admin:</span> admin@health1erp.com / Admin@123</p>
+                <p><span className="font-medium">Doctor:</span> doctor@health1erp.com / Doctor@123</p>
+                <p><span className="font-medium">Nurse:</span> nurse@health1erp.com / Nurse@123</p>
               </div>
             </div>
           </div>
