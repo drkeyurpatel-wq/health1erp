@@ -1,94 +1,166 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Plus, Clock, User } from "lucide-react";
+import { Calendar, Plus, Clock, User, Video, ArrowRight } from "lucide-react";
+import { AppointmentBooking } from "@/components/modals/appointment-booking";
+import { EmptyState } from "@/components/common/empty-state";
+import { useToast } from "@/contexts/toast-context";
 import api from "@/lib/api";
 
 export default function AppointmentsPage() {
   const [queue, setQueue] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showBooking, setShowBooking] = useState(false);
+  const { toast } = useToast();
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
+    setLoading(true);
     const today = new Date().toISOString().split("T")[0];
-    api.get(`/appointments?date_filter=${today}`).then(r => setAppointments(r.data)).catch(() => {});
-    api.get("/appointments/queue").then(r => setQueue(r.data)).catch(() => {});
+    Promise.all([
+      api.get(`/appointments?date_filter=${today}`).then(r => setAppointments(Array.isArray(r.data) ? r.data : r.data?.items || [])).catch(() => {}),
+      api.get("/appointments/queue").then(r => setQueue(Array.isArray(r.data) ? r.data : [])).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
 
-  const statusColor: Record<string, string> = {
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const statusColor: Record<string, "secondary" | "default" | "warning" | "success" | "danger"> = {
     Scheduled: "secondary", Confirmed: "default", InProgress: "warning",
     Completed: "success", Cancelled: "danger", NoShow: "danger",
+  };
+
+  const handleCheckIn = async (id: string) => {
+    try {
+      await api.post(`/appointments/${id}/check-in`);
+      toast("success", "Checked In", "Patient has been checked in");
+      loadData();
+    } catch (err: any) {
+      toast("error", "Check-in Failed", err.response?.data?.detail || "Error");
+    }
   };
 
   return (
     <AppShell>
       <div className="page-header">
-        <h1 className="page-title">Appointments</h1>
-        <Button><Plus className="h-4 w-4 mr-2" />Book Appointment</Button>
+        <div>
+          <h1 className="page-title">Appointments</h1>
+          <p className="page-subtitle">Manage today&apos;s schedule and patient queue</p>
+        </div>
+        <Button variant="gradient" onClick={() => setShowBooking(true)}>
+          <Plus className="h-4 w-4 mr-2" />Book Appointment
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Queue */}
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5" />Live Queue</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {queue.map((q: any) => (
-                <div key={q.appointment_id} className="flex items-center gap-3 p-3 rounded-lg border">
-                  <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-sm">
-                    {q.token_number}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{q.patient_name}</p>
-                    <p className="text-xs text-gray-500">{q.doctor_name}</p>
-                  </div>
-                  <Badge variant={q.status === "InProgress" ? "warning" : "default"}>{q.status}</Badge>
-                </div>
-              ))}
-              {queue.length === 0 && <p className="text-gray-400 text-sm text-center py-4">No patients in queue</p>}
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2"><Clock className="h-4 w-4 text-primary-500" />Live Queue</CardTitle>
+              <Badge variant="info" dot>{queue.length} waiting</Badge>
             </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-3 animate-pulse">
+                {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-xl" />)}
+              </div>
+            ) : queue.length === 0 ? (
+              <div className="text-center py-8">
+                <Clock className="h-10 w-10 text-gray-200 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">No patients in queue</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {queue.map((q: any, idx: number) => (
+                  <div key={q.appointment_id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                    idx === 0 ? "border-primary-200 bg-primary-50/50 shadow-sm" : "border-gray-100 hover:bg-gray-50"
+                  }`}>
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-sm ${
+                      idx === 0 ? "bg-primary-600 text-white shadow" : "bg-gray-100 text-gray-600"
+                    }`}>
+                      {q.token_number}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{q.patient_name}</p>
+                      <p className="text-xs text-gray-500 truncate">{q.doctor_name}</p>
+                    </div>
+                    <Badge variant={q.status === "InProgress" ? "warning" : "default"} dot>{q.status}</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Today's Appointments */}
         <Card className="lg:col-span-2">
-          <CardHeader><CardTitle>Today's Appointments</CardTitle></CardHeader>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Today&apos;s Appointments</CardTitle>
+              <Badge variant="secondary">{appointments.length} scheduled</Badge>
+            </div>
+          </CardHeader>
           <CardContent>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-3 font-medium text-gray-500">Token</th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500">Time</th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500">Type</th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500">Status</th>
-                  <th className="text-left py-3 px-3 font-medium text-gray-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {appointments.map((a: any) => (
-                  <tr key={a.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="py-3 px-3 font-bold text-primary-600">{a.token_number || "-"}</td>
-                    <td className="py-3 px-3">{a.start_time}</td>
-                    <td className="py-3 px-3"><Badge variant="outline">{a.appointment_type}</Badge></td>
-                    <td className="py-3 px-3">
-                      <Badge variant={(statusColor[a.status] || "secondary") as any}>{a.status}</Badge>
-                    </td>
-                    <td className="py-3 px-3">
-                      {a.status === "Scheduled" && (
-                        <Button size="sm" variant="outline" onClick={() => {
-                          api.post(`/appointments/${a.id}/check-in`).then(() => window.location.reload());
-                        }}>Check In</Button>
-                      )}
-                    </td>
+            {loading ? (
+              <div className="space-y-3 animate-pulse">
+                {[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded" />)}
+              </div>
+            ) : appointments.length === 0 ? (
+              <EmptyState
+                icon="appointments" title="No appointments today"
+                description="Book a new appointment to get started"
+                actionLabel="Book Appointment"
+                onAction={() => setShowBooking(true)}
+              />
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Token</th>
+                    <th>Time</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {appointments.map((a: any) => (
+                    <tr key={a.id}>
+                      <td>
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary-700 font-bold text-sm">
+                          {a.token_number || "-"}
+                        </span>
+                      </td>
+                      <td className="text-gray-600">{a.start_time}</td>
+                      <td>
+                        <Badge variant="outline">
+                          {a.is_teleconsultation && <Video className="h-3 w-3 mr-1" />}
+                          {a.appointment_type}
+                        </Badge>
+                      </td>
+                      <td><Badge variant={statusColor[a.status] || "secondary"} dot>{a.status}</Badge></td>
+                      <td>
+                        {a.status === "Scheduled" && (
+                          <Button size="sm" variant="outline" onClick={() => handleCheckIn(a.id)}>
+                            <ArrowRight className="h-3.5 w-3.5 mr-1" />Check In
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      <AppointmentBooking open={showBooking} onClose={() => setShowBooking(false)} onSuccess={loadData} />
     </AppShell>
   );
 }

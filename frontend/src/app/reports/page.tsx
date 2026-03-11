@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { BarChart3, Download, TrendingUp, Users, BedDouble, IndianRupee } from "lucide-react";
+import { BarChart3, Download, TrendingUp, Users, BedDouble, IndianRupee, ArrowUpRight } from "lucide-react";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import api from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
@@ -17,17 +17,28 @@ export default function ReportsPage() {
   const [deptStats, setDeptStats] = useState<any[]>([]);
   const [dateFrom, setDateFrom] = useState(new Date().toISOString().split("T")[0]);
   const [dateTo, setDateTo] = useState(new Date().toISOString().split("T")[0]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get("/reports/daily-summary").then(r => setDaily(r.data)).catch(() => {});
-    api.get(`/reports/financial?from_date=${dateFrom}&to_date=${dateTo}`).then(r => setFinancial(r.data)).catch(() => {});
-    api.get("/reports/department-stats").then(r => setDeptStats(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    setLoading(true);
+    Promise.all([
+      api.get("/reports/daily-summary").then(r => setDaily(r.data)).catch(() => {}),
+      api.get(`/reports/financial?from_date=${dateFrom}&to_date=${dateTo}`).then(r => setFinancial(r.data)).catch(() => {}),
+      api.get("/reports/department-stats").then(r => setDeptStats(Array.isArray(r.data) ? r.data : [])).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, [dateFrom, dateTo]);
+
+  const kpiCards = [
+    { title: "OPD Visits", value: daily?.total_appointments || 0, icon: Users, color: "from-blue-500 to-blue-600", change: "+12%" },
+    { title: "Admissions", value: daily?.new_admissions || 0, icon: BedDouble, color: "from-teal-500 to-teal-600", change: "+3" },
+    { title: "Revenue", value: formatCurrency(daily?.revenue || 0), icon: IndianRupee, color: "from-emerald-500 to-emerald-600", change: "+18%" },
+    { title: "Collections", value: formatCurrency(daily?.collections || 0), icon: TrendingUp, color: "from-amber-500 to-amber-600", change: "+15%" },
+  ];
 
   return (
     <AppShell>
       <div className="page-header">
-        <h1 className="page-title">Reports & Analytics</h1>
+        <div><h1 className="page-title">Reports & Analytics</h1><p className="page-subtitle">Hospital performance insights and financial reports</p></div>
         <div className="flex items-center gap-2">
           <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-40" />
           <span className="text-gray-400">to</span>
@@ -36,31 +47,22 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Card><CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary-50"><Users className="h-5 w-5 text-primary-600" /></div>
-            <div><p className="text-xs text-gray-500">OPD Visits</p><p className="text-xl font-bold">{daily?.total_appointments || 0}</p></div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 animate-stagger">
+        {kpiCards.map(card => (
+          <div key={card.title} className="stat-card">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-gray-500">{card.title}</p>
+                <p className="text-xl font-bold mt-1 counter-value">{card.value}</p>
+                <div className="flex items-center gap-1 mt-1.5">
+                  <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+                  <span className="text-xs font-medium text-emerald-600">{card.change}</span>
+                </div>
+              </div>
+              <div className={`p-2.5 rounded-xl bg-gradient-to-br ${card.color}`}><card.icon className="h-4 w-4 text-white" /></div>
+            </div>
           </div>
-        </CardContent></Card>
-        <Card><CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-secondary-50"><BedDouble className="h-5 w-5 text-secondary-600" /></div>
-            <div><p className="text-xs text-gray-500">Admissions</p><p className="text-xl font-bold">{daily?.new_admissions || 0}</p></div>
-          </div>
-        </CardContent></Card>
-        <Card><CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-50"><IndianRupee className="h-5 w-5 text-green-600" /></div>
-            <div><p className="text-xs text-gray-500">Revenue</p><p className="text-xl font-bold">{formatCurrency(daily?.revenue || 0)}</p></div>
-          </div>
-        </CardContent></Card>
-        <Card><CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-50"><TrendingUp className="h-5 w-5 text-amber-600" /></div>
-            <div><p className="text-xs text-gray-500">Collections</p><p className="text-xl font-bold">{formatCurrency(daily?.collections || 0)}</p></div>
-          </div>
-        </CardContent></Card>
+        ))}
       </div>
 
       <Tabs defaultValue="overview">
@@ -72,57 +74,57 @@ export default function ReportsPage() {
 
         <TabsContent value="overview">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card><CardHeader><CardTitle>Revenue Trends</CardTitle></CardHeader>
-              <CardContent><RevenueChart /></CardContent>
-            </Card>
+            <Card><CardHeader><CardTitle>Revenue Trends</CardTitle></CardHeader><CardContent><RevenueChart /></CardContent></Card>
             <Card><CardHeader><CardTitle>Operational Summary</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between text-sm"><span className="text-gray-500">Current Inpatients</span><span className="font-medium">{daily?.current_inpatients || 0}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-500">Discharges Today</span><span className="font-medium">{daily?.discharges || 0}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-500">Lab Orders</span><span className="font-medium">{daily?.lab_orders || 0}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-500">Prescriptions</span><span className="font-medium">{daily?.prescriptions || 0}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-500">Surgeries</span><span className="font-medium">{daily?.surgeries || 0}</span></div>
+              <CardContent className="space-y-3">
+                {[
+                  { label: "Current Inpatients", value: daily?.current_inpatients || 0 },
+                  { label: "Discharges Today", value: daily?.discharges || 0 },
+                  { label: "Lab Orders", value: daily?.lab_orders || 0 },
+                  { label: "Prescriptions", value: daily?.prescriptions || 0 },
+                  { label: "Surgeries", value: daily?.surgeries || 0 },
+                ].map(item => (
+                  <div key={item.label} className="flex justify-between text-sm py-1.5">
+                    <span className="text-gray-500">{item.label}</span><span className="font-semibold">{item.value}</span>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
         <TabsContent value="financial">
-          <Card><CardHeader><CardTitle>Financial Report</CardTitle></CardHeader>
-            <CardContent>
-              {financial ? (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="p-4 bg-green-50 rounded-lg">
-                      <p className="text-sm text-green-600">Total Revenue</p>
-                      <p className="text-2xl font-bold text-green-800">{formatCurrency(financial.total_revenue || 0)}</p>
-                    </div>
-                    <div className="p-4 bg-primary-50 rounded-lg">
-                      <p className="text-sm text-primary-600">Total Collected</p>
-                      <p className="text-2xl font-bold text-primary-800">{formatCurrency(financial.total_collected || 0)}</p>
-                    </div>
-                    <div className="p-4 bg-amber-50 rounded-lg">
-                      <p className="text-sm text-amber-600">Outstanding</p>
-                      <p className="text-2xl font-bold text-amber-800">{formatCurrency(financial.total_outstanding || 0)}</p>
-                    </div>
-                  </div>
+          <Card><CardContent className="pt-6">
+            {financial ? (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100">
+                  <p className="text-sm text-emerald-600 font-medium">Total Revenue</p>
+                  <p className="text-2xl font-bold text-emerald-800 mt-1">{formatCurrency(financial.total_revenue || 0)}</p>
                 </div>
-              ) : <p className="text-gray-400 text-center py-8">Loading financial data...</p>}
-            </CardContent>
-          </Card>
+                <div className="p-5 bg-blue-50 rounded-2xl border border-blue-100">
+                  <p className="text-sm text-blue-600 font-medium">Total Collected</p>
+                  <p className="text-2xl font-bold text-blue-800 mt-1">{formatCurrency(financial.total_collected || 0)}</p>
+                </div>
+                <div className="p-5 bg-amber-50 rounded-2xl border border-amber-100">
+                  <p className="text-sm text-amber-600 font-medium">Outstanding</p>
+                  <p className="text-2xl font-bold text-amber-800 mt-1">{formatCurrency(financial.total_outstanding || 0)}</p>
+                </div>
+              </div>
+            ) : <p className="text-gray-400 text-center py-8">Loading financial data...</p>}
+          </CardContent></Card>
         </TabsContent>
 
         <TabsContent value="departments">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {deptStats.map((dept: any, i: number) => (
-              <Card key={i}><CardContent className="p-4">
-                <h3 className="font-medium mb-2">{dept.department || dept.name}</h3>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-500">Staff</span><span>{dept.staff_count || 0}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Patients</span><span>{dept.patient_count || 0}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Revenue</span><span>{formatCurrency(dept.revenue || 0)}</span></div>
+              <div key={i} className="interactive-card p-5">
+                <h3 className="font-semibold text-gray-900 mb-3">{dept.department || dept.name}</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-500">Staff</span><span className="font-medium">{dept.staff_count || 0}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Patients</span><span className="font-medium">{dept.patient_count || 0}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Revenue</span><span className="font-medium text-emerald-600">{formatCurrency(dept.revenue || 0)}</span></div>
                 </div>
-              </CardContent></Card>
+              </div>
             ))}
           </div>
         </TabsContent>

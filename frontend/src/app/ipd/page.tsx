@@ -1,172 +1,163 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BedDouble, AlertTriangle, TrendingDown, TrendingUp, Plus, Brain } from "lucide-react";
+import { BedDouble, AlertTriangle, Plus, Brain, Activity, TrendingDown, Clock } from "lucide-react";
 import { OccupancyChart } from "@/components/charts/occupancy-chart";
+import { EmptyState } from "@/components/common/empty-state";
 import api from "@/lib/api";
 import { getRiskColor, getRiskLabel, formatDateTime } from "@/lib/utils";
-import type { Admission, IPDDashboard, Bed } from "@/types";
+import type { Admission, IPDDashboard } from "@/types";
 import { useRealtime } from "@/hooks/use-realtime";
 
 export default function IPDPage() {
   const [dashboard, setDashboard] = useState<IPDDashboard | null>(null);
   const [admissions, setAdmissions] = useState<Admission[]>([]);
   const [beds, setBeds] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  useRealtime("bed_update", () => {
-    // Refresh data on bed updates
-    loadData();
-  });
+  const loadData = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      api.get("/ipd/dashboard").then(r => setDashboard(r.data)).catch(() => {}),
+      api.get("/ipd/admissions?status_filter=Admitted").then(r => setAdmissions(Array.isArray(r.data) ? r.data : r.data?.items || [])).catch(() => {}),
+      api.get("/ipd/bed-management").then(r => setBeds(r.data)).catch(() => {}),
+    ]).finally(() => setLoading(false));
+  }, []);
 
-  const loadData = () => {
-    api.get("/ipd/dashboard").then(r => setDashboard(r.data)).catch(() => {});
-    api.get("/ipd/admissions?status_filter=Admitted").then(r => setAdmissions(r.data)).catch(() => {});
-    api.get("/ipd/bed-management").then(r => setBeds(r.data)).catch(() => {});
-  };
+  useRealtime("bed_update", loadData);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  useEffect(() => { loadData(); }, []);
+  const statCards = [
+    { title: "Total Admitted", value: dashboard?.total_admitted || 0, color: "from-blue-500 to-blue-600", icon: BedDouble },
+    { title: "Occupancy Rate", value: `${dashboard?.occupancy_rate || 0}%`, color: "from-teal-500 to-teal-600", icon: Activity },
+    { title: "ICU Occupancy", value: `${dashboard?.icu_occupancy_rate || 0}%`, color: "from-amber-500 to-amber-600", icon: AlertTriangle },
+    { title: "Critical", value: dashboard?.critical_count || 0, color: "from-red-500 to-red-600", icon: AlertTriangle },
+    { title: "Avg LOS", value: `${dashboard?.average_los || 0}d`, color: "from-purple-500 to-purple-600", icon: Clock },
+  ];
 
   return (
     <AppShell>
       <div className="page-header">
         <div>
           <h1 className="page-title">IPD - Inpatient Department</h1>
-          <p className="text-gray-500 text-sm mt-1">Real-time bed management and patient monitoring</p>
+          <p className="page-subtitle">Real-time bed management and patient monitoring</p>
         </div>
-        <Link href="/ipd/admit">
-          <Button><Plus className="h-4 w-4 mr-2" />New Admission</Button>
-        </Link>
+        <Link href="/ipd/admit"><Button variant="gradient"><Plus className="h-4 w-4 mr-2" />New Admission</Button></Link>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-gray-500">Total Admitted</p>
-            <p className="text-3xl font-bold text-primary-700">{dashboard?.total_admitted || 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-gray-500">Occupancy Rate</p>
-            <p className="text-3xl font-bold text-secondary-700">{dashboard?.occupancy_rate || 0}%</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-gray-500">ICU Occupancy</p>
-            <p className="text-3xl font-bold text-amber-700">{dashboard?.icu_occupancy_rate || 0}%</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div>
-              <p className="text-sm text-gray-500">Critical Patients</p>
-              <p className="text-3xl font-bold text-red-600">{dashboard?.critical_count || 0}</p>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8 animate-stagger">
+        {statCards.map(stat => (
+          <div key={stat.title} className="stat-card">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-gray-500">{stat.title}</p>
+              <div className={`p-2 rounded-lg bg-gradient-to-br ${stat.color}`}>
+                <stat.icon className="h-4 w-4 text-white" />
+              </div>
             </div>
-            {(dashboard?.critical_count || 0) > 0 && <AlertTriangle className="h-8 w-8 text-red-500" />}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-gray-500">Avg Length of Stay</p>
-            <p className="text-3xl font-bold text-gray-700">{dashboard?.average_los || 0}d</p>
-          </CardContent>
-        </Card>
+            <p className="text-2xl font-bold counter-value">{stat.value}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Bed Visual Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* Bed Management */}
         <Card className="lg:col-span-2">
-          <CardHeader><CardTitle>Bed Management</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Ward Occupancy</CardTitle></CardHeader>
           <CardContent>
             {beds?.wards?.map((ward: any) => (
               <div key={ward.ward_id} className="mb-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium">{ward.ward_name}</h4>
-                  <span className="text-xs text-gray-500">{ward.occupied}/{ward.total_beds} occupied</span>
+                  <h4 className="text-sm font-medium text-gray-700">{ward.ward_name}</h4>
+                  <span className="text-xs text-gray-500 font-medium">{ward.occupied}/{ward.total_beds} beds</span>
                 </div>
-                <div className="w-full bg-gray-100 rounded-full h-3">
+                <div className="w-full bg-gray-100 rounded-full h-2.5">
                   <div
-                    className={`h-3 rounded-full ${ward.occupancy_rate > 90 ? "bg-red-500" : ward.occupancy_rate > 70 ? "bg-amber-500" : "bg-green-500"}`}
+                    className={`h-2.5 rounded-full transition-all duration-500 ${
+                      ward.occupancy_rate > 90 ? "bg-gradient-to-r from-red-400 to-red-500" :
+                      ward.occupancy_rate > 70 ? "bg-gradient-to-r from-amber-400 to-amber-500" :
+                      "bg-gradient-to-r from-emerald-400 to-emerald-500"
+                    }`}
                     style={{ width: `${ward.occupancy_rate}%` }}
                   />
                 </div>
               </div>
-            ))}
+            )) || <p className="text-gray-400 text-sm text-center py-4">No ward data</p>}
           </CardContent>
         </Card>
 
-        {/* Ward Stats Chart */}
         <Card>
-          <CardHeader><CardTitle>Ward Occupancy</CardTitle></CardHeader>
-          <CardContent>
-            <OccupancyChart data={dashboard?.ward_stats || []} />
-          </CardContent>
+          <CardHeader><CardTitle>Occupancy Chart</CardTitle></CardHeader>
+          <CardContent><OccupancyChart data={dashboard?.ward_stats || []} /></CardContent>
         </Card>
       </div>
 
-      {/* Active Admissions Table */}
+      {/* Active Admissions */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Active Admissions</CardTitle>
-            <Badge variant="secondary">{admissions.length} patients</Badge>
+            <Badge variant="info" dot>{admissions.length} patients</Badge>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">Patient</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">Admitted</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">Type</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">Diagnosis</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">AI Risk</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">LOS</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {admissions.map((admission) => (
-                  <tr key={admission.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="py-3 px-4 font-medium">{admission.patient_id.slice(0, 8)}...</td>
-                    <td className="py-3 px-4 text-gray-500">{formatDateTime(admission.admission_date)}</td>
-                    <td className="py-3 px-4">
-                      <Badge variant={admission.admission_type === "Emergency" ? "danger" : "default"}>
-                        {admission.admission_type}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-4 text-gray-500 max-w-[200px] truncate">
-                      {admission.diagnosis_at_admission?.join(", ") || "-"}
-                    </td>
-                    <td className="py-3 px-4">
-                      {admission.ai_risk_score !== undefined && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getRiskColor(admission.ai_risk_score)}`}>
-                          <Brain className="h-3 w-3" />
-                          {getRiskLabel(admission.ai_risk_score)} ({(admission.ai_risk_score * 100).toFixed(0)}%)
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-gray-500">{admission.estimated_los || "-"}d</td>
-                    <td className="py-3 px-4">
-                      <Link href={`/ipd/${admission.id}`}>
-                        <Button size="sm" variant="outline">View</Button>
-                      </Link>
-                    </td>
+          {loading ? (
+            <div className="space-y-3 animate-pulse">
+              {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded" />)}
+            </div>
+          ) : admissions.length === 0 ? (
+            <EmptyState icon="ipd" title="No active admissions" description="Admit a patient to get started" />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Patient</th>
+                    <th>Admitted</th>
+                    <th>Type</th>
+                    <th>Diagnosis</th>
+                    <th>AI Risk</th>
+                    <th>LOS</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-                {admissions.length === 0 && (
-                  <tr><td colSpan={7} className="py-8 text-center text-gray-400">No active admissions</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {admissions.map(admission => (
+                    <tr key={admission.id}>
+                      <td className="font-medium">{admission.patient_id.slice(0, 8)}...</td>
+                      <td className="text-gray-500">{formatDateTime(admission.admission_date)}</td>
+                      <td>
+                        <Badge variant={admission.admission_type === "Emergency" ? "danger" : "default"} dot>
+                          {admission.admission_type}
+                        </Badge>
+                      </td>
+                      <td className="text-gray-500 max-w-[200px] truncate">
+                        {admission.diagnosis_at_admission?.join(", ") || "-"}
+                      </td>
+                      <td>
+                        {admission.ai_risk_score !== undefined && (
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${getRiskColor(admission.ai_risk_score)}`}>
+                            <Brain className="h-3 w-3" />
+                            {getRiskLabel(admission.ai_risk_score)} ({(admission.ai_risk_score * 100).toFixed(0)}%)
+                          </span>
+                        )}
+                      </td>
+                      <td className="text-gray-500">{admission.estimated_los || "-"}d</td>
+                      <td>
+                        <Link href={`/ipd/${admission.id}`}>
+                          <Button size="sm" variant="outline">View</Button>
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </AppShell>
