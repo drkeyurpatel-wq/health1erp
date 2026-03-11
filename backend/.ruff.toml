@@ -1,0 +1,31 @@
+# Ruff linter configuration for Health1ERP backend
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "S",   # flake8-bandit (security)
+    "T20", # flake8-print
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "S101",  # assert usage (ok in tests)
+    "S105",  # hardcoded password (false positives in config defaults)
+    "S106",  # hardcoded password argument
+    "B008",  # function calls in default arguments (needed for FastAPI Depends)
+]
+
+[lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S106"]
+"migrations/**/*.py" = ["E501"]
+
+[lint.isort]
+known-first-party = ["app"]

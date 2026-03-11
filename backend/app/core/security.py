@@ -77,18 +77,21 @@ def create_access_token(subject: UUID, role: str, extra: dict[str, Any] | None =
     payload = {"sub": str(subject), "role": role, "exp": expire, "type": "access"}
     if extra:
         payload.update(extra)
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    secret = settings.SECRET_KEY.get_secret_value()
+    return jwt.encode(payload, secret, algorithm=settings.JWT_ALGORITHM)
 
 
 def create_refresh_token(subject: UUID) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     payload = {"sub": str(subject), "exp": expire, "type": "refresh"}
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    secret = settings.SECRET_KEY.get_secret_value()
+    return jwt.encode(payload, secret, algorithm=settings.JWT_ALGORITHM)
 
 
 def decode_token(token: str) -> Optional[dict]:
     try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        secret = settings.SECRET_KEY.get_secret_value()
+        return jwt.decode(token, secret, algorithms=[settings.JWT_ALGORITHM])
     except JWTError:
         return None
 
