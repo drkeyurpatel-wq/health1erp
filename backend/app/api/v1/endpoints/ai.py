@@ -1,14 +1,35 @@
+"""AI & Clinical Decision Support System API endpoints.
+
+All clinical logic is delegated to the CDSS engine (app.ai.cdss_engine)
+and medical translator (app.ai.medical_translator). This module handles
+HTTP concerns only — request parsing, DB lookups, response formatting.
+"""
+
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.cdss_engine import (
+    analyze_patient_data,
+    calculate_early_warning_score,
+    check_drug_interactions,
+    generate_discharge_summary,
+    predict_length_of_stay,
+    suggest_differential_diagnosis,
+)
+from app.ai.drug_interaction_db import INTERACTION_COUNT
+from app.ai.medical_translator import translate_text, get_localized_instructions
 from app.core.database import get_db
 from app.core.deps import RoleChecker
 from app.models.user import User
 
 router = APIRouter()
+
+
+# ── Request / Response schemas ─────────────────────────────────────
 
 
 class CDSSRequest(BaseModel):
@@ -17,14 +38,35 @@ class CDSSRequest(BaseModel):
     vitals: dict = {}
     current_medications: List[str] = []
     lab_results: dict = {}
-    diagnosis: Optional[str] = None
+    diagnosis: List[str] = []
 
 
 class DiagnosisSuggestRequest(BaseModel):
-    symptoms: List[str]
+    symptoms: List[str] = Field(..., min_length=1)
     age: Optional[int] = None
     gender: Optional[str] = None
     medical_history: List[str] = []
+
+
+class DrugInteractionRequest(BaseModel):
+    medications: List[str] = Field(..., min_length=1)
+
+
+class LOSRequest(BaseModel):
+    admission_type: str = "Elective"
+    diagnosis: List[str] = []
+    age: Optional[int] = None
+    comorbidities: List[str] = []
+
+
+class EWSRequest(BaseModel):
+    respiratory_rate: Optional[float] = None
+    spo2: Optional[float] = None
+    bp_systolic: Optional[float] = None
+    pulse: Optional[float] = None
+    temperature: Optional[float] = None
+    gcs: Optional[int] = None
+    is_on_supplemental_o2: bool = False
 
 
 class TranslateRequest(BaseModel):
@@ -39,116 +81,78 @@ class DischargeSummaryRequest(BaseModel):
     language: str = "en"
 
 
+class LocalizedInstructionsRequest(BaseModel):
+    instruction_type: str = "post_discharge"
+    language: str = "en"
+
+
+# ── Endpoints ──────────────────────────────────────────────────────
+
+
 @router.post("/cdss/recommend")
 async def cdss_recommend(
     data: CDSSRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(RoleChecker("ipd:read")),
 ):
-    """Clinical Decision Support - analyze patient data and provide recommendations."""
-    recommendations = []
-    alerts = []
+    """Comprehensive CDSS analysis — vitals, labs, medications, symptoms.
 
-    # Vitals-based alerts
-    vitals = data.vitals
-    if vitals.get("bp_systolic", 0) > 140:
-        alerts.append({"type": "warning", "message": "Elevated blood pressure detected"})
-        recommendations.append("Consider antihypertensive medication adjustment")
-    if vitals.get("spo2", 100) < 94:
-        alerts.append({"type": "critical", "message": "Low oxygen saturation"})
-        recommendations.append("Initiate supplemental oxygen therapy")
-    if vitals.get("temperature", 37) > 38.5:
-        alerts.append({"type": "warning", "message": "Fever detected"})
-        recommendations.append("Order blood cultures and start empiric antibiotics if infection suspected")
-
-    # Medication-based recommendations
-    meds = data.current_medications
-    if any("warfarin" in m.lower() for m in meds):
-        recommendations.append("Monitor INR regularly - patient on anticoagulant therapy")
-    if any("insulin" in m.lower() for m in meds):
-        recommendations.append("Monitor blood glucose levels - patient on insulin therapy")
-
-    # Symptom-based
-    symptoms = [s.lower() for s in data.symptoms]
-    if "chest pain" in symptoms:
-        alerts.append({"type": "critical", "message": "Chest pain reported - rule out ACS"})
-        recommendations.append("Order ECG, Troponin levels, and chest X-ray")
-    if "shortness of breath" in symptoms:
-        recommendations.append("Assess respiratory status, consider ABG and chest imaging")
-
+    Delegates to the CDSS engine which runs:
+    - Vitals analysis with clinical thresholds
+    - Lab value interpretation
+    - Drug interaction checking (50+ interaction pairs)
+    - Symptom-based alerts
+    - NEWS2 early warning score (if vitals provided)
+    """
+    result = await analyze_patient_data(
+        vitals=data.vitals,
+        labs=data.lab_results,
+        medications=data.current_medications,
+        diagnosis=data.diagnosis,
+        symptoms=data.symptoms,
+    )
     return {
         "patient_id": data.patient_id,
-        "recommendations": recommendations,
-        "alerts": alerts,
-        "confidence": 0.85,
+        **result,
     }
 
 
 @router.post("/predict-los")
 async def predict_los(
-    admission_type: str,
-    diagnosis: List[str],
-    age: int = None,
-    comorbidities: List[str] = None,
+    data: LOSRequest,
     user: User = Depends(RoleChecker("ipd:read")),
 ):
-    """Predict Length of Stay based on admission parameters."""
-    base_los = 3
-    if admission_type == "Emergency":
-        base_los += 2
-    if age and age > 65:
-        base_los += 2
-    if comorbidities:
-        base_los += len(comorbidities)
-    if len(diagnosis) > 2:
-        base_los += 1
+    """Predict hospital Length of Stay using weighted heuristic model.
 
-    return {
-        "predicted_los_days": base_los,
-        "confidence": 0.72,
-        "factors": {
-            "admission_type": admission_type,
-            "diagnosis_count": len(diagnosis),
-            "age_factor": "elderly" if age and age > 65 else "standard",
-            "comorbidity_count": len(comorbidities) if comorbidities else 0,
-        },
-    }
+    Factors in admission type, age, comorbidities, and diagnosis acuity keywords.
+    Returns predicted days, confidence-bounded range, and factor breakdown.
+    """
+    return predict_length_of_stay(
+        admission_type=data.admission_type,
+        diagnosis=data.diagnosis,
+        age=data.age,
+        comorbidities=data.comorbidities,
+    )
 
 
 @router.post("/drug-interactions")
-async def check_drug_interactions(
-    medications: List[str],
+async def check_interactions(
+    data: DrugInteractionRequest,
     user: User = Depends(RoleChecker("pharmacy:read")),
 ):
-    """Check for drug-drug interactions."""
-    interactions = []
-    meds_lower = [m.lower() for m in medications]
+    """Check for drug-drug interactions against a database of 50+ known interaction pairs.
 
-    known_interactions = {
-        ("warfarin", "aspirin"): {
-            "severity": "high",
-            "description": "Increased bleeding risk",
-            "recommendation": "Monitor INR closely, consider alternative",
-        },
-        ("metformin", "contrast dye"): {
-            "severity": "high",
-            "description": "Risk of lactic acidosis",
-            "recommendation": "Hold metformin 48h before/after contrast",
-        },
-        ("ace inhibitor", "potassium"): {
-            "severity": "moderate",
-            "description": "Risk of hyperkalemia",
-            "recommendation": "Monitor serum potassium levels",
-        },
+    Each result includes severity, description, pharmacological mechanism,
+    and clinical recommendation. Severities: contraindicated, high, moderate, low.
+    """
+    interactions = check_drug_interactions(data.medications)
+    return {
+        "medications": data.medications,
+        "interactions": interactions,
+        "interaction_count": len(interactions),
+        "total_checked": len(data.medications),
+        "database_size": INTERACTION_COUNT,
     }
-
-    for (drug_a, drug_b), info in known_interactions.items():
-        if any(drug_a in m for m in meds_lower) and any(drug_b in m for m in meds_lower):
-            interactions.append({
-                "drug_a": drug_a, "drug_b": drug_b, **info,
-            })
-
-    return {"medications": medications, "interactions": interactions, "total_checked": len(medications)}
 
 
 @router.post("/diagnosis-suggest")
@@ -156,92 +160,92 @@ async def suggest_diagnosis(
     data: DiagnosisSuggestRequest,
     user: User = Depends(RoleChecker("ipd:read")),
 ):
-    """Suggest differential diagnoses based on symptoms."""
-    symptoms = [s.lower() for s in data.symptoms]
-    suggestions = []
+    """Suggest differential diagnoses ranked by probability.
 
-    symptom_map = {
-        "chest pain": [
-            {"diagnosis": "Acute Coronary Syndrome", "icd": "I21.9", "probability": 0.35},
-            {"diagnosis": "Costochondritis", "icd": "M94.0", "probability": 0.20},
-            {"diagnosis": "GERD", "icd": "K21.0", "probability": 0.15},
-            {"diagnosis": "Pulmonary Embolism", "icd": "I26.9", "probability": 0.10},
-        ],
-        "fever": [
-            {"diagnosis": "Upper Respiratory Infection", "icd": "J06.9", "probability": 0.30},
-            {"diagnosis": "Urinary Tract Infection", "icd": "N39.0", "probability": 0.20},
-            {"diagnosis": "Pneumonia", "icd": "J18.9", "probability": 0.15},
-        ],
-        "headache": [
-            {"diagnosis": "Tension Headache", "icd": "G44.2", "probability": 0.40},
-            {"diagnosis": "Migraine", "icd": "G43.9", "probability": 0.25},
-            {"diagnosis": "Hypertensive Crisis", "icd": "I16.9", "probability": 0.10},
-        ],
-        "abdominal pain": [
-            {"diagnosis": "Acute Appendicitis", "icd": "K35.80", "probability": 0.20},
-            {"diagnosis": "Gastritis", "icd": "K29.7", "probability": 0.25},
-            {"diagnosis": "Cholecystitis", "icd": "K81.0", "probability": 0.15},
-        ],
+    Covers 10+ symptom categories with 80+ diagnoses including ICD-10 codes
+    and recommended workup. Adjusts probabilities for age, gender, and medical history.
+    """
+    suggestions = suggest_differential_diagnosis(
+        symptoms=data.symptoms,
+        age=data.age,
+        gender=data.gender,
+        medical_history=data.medical_history,
+    )
+    return {
+        "symptoms": data.symptoms,
+        "patient_context": {
+            "age": data.age,
+            "gender": data.gender,
+            "history_count": len(data.medical_history),
+        },
+        "differential_diagnoses": suggestions,
     }
 
-    for symptom in symptoms:
-        if symptom in symptom_map:
-            for dx in symptom_map[symptom]:
-                if not any(s["diagnosis"] == dx["diagnosis"] for s in suggestions):
-                    suggestions.append(dx)
 
-    suggestions.sort(key=lambda x: x["probability"], reverse=True)
-    return {"symptoms": data.symptoms, "differential_diagnoses": suggestions[:10]}
+@router.post("/early-warning-score")
+async def compute_early_warning_score(
+    data: EWSRequest,
+    user: User = Depends(RoleChecker("ipd:read")),
+):
+    """Calculate NEWS2 (National Early Warning Score 2).
+
+    Scores 6 physiological parameters and returns total score, per-parameter
+    breakdown, risk level (low/medium/high), and recommended clinical response.
+    """
+    vitals = data.model_dump(exclude_none=True)
+    return calculate_early_warning_score(vitals)
 
 
 @router.post("/discharge-summary/generate")
-async def generate_discharge_summary(
+async def generate_summary(
     data: DischargeSummaryRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(RoleChecker("ipd:write")),
 ):
-    """Auto-generate discharge summary using AI."""
+    """Generate discharge summary — uses AI (OpenAI) when configured, structured template otherwise.
+
+    Fetches admission and patient data from the database, then delegates to the
+    CDSS engine's discharge summary generator.
+    """
     from app.models.ipd import Admission
     from app.models.patient import Patient
-    from sqlalchemy import select
 
-    admission = (await db.execute(
-        select(Admission).where(Admission.id == data.admission_id)
-    )).scalar_one_or_none()
+    admission = (
+        await db.execute(select(Admission).where(Admission.id == data.admission_id))
+    ).scalar_one_or_none()
 
     if not admission:
-        return {"error": "Admission not found"}
+        raise HTTPException(status_code=404, detail="Admission not found")
 
-    patient = (await db.execute(
-        select(Patient).where(Patient.id == admission.patient_id)
-    )).scalar_one_or_none()
+    patient = (
+        await db.execute(select(Patient).where(Patient.id == admission.patient_id))
+    ).scalar_one_or_none()
 
     name = f"{patient.first_name} {patient.last_name}" if patient else "N/A"
-    summary = f"""DISCHARGE SUMMARY
-================
-Patient: {name} (UHID: {patient.uhid if patient else 'N/A'})
-Admission Date: {admission.admission_date}
-Discharge Date: {admission.discharge_date or 'Pending'}
-Admission Type: {admission.admission_type}
+    uhid = patient.uhid if patient else "N/A"
 
-DIAGNOSIS:
-{chr(10).join(f'- {d}' for d in (admission.diagnosis_at_admission or ['Not specified']))}
+    admission_data = {
+        "admission_date": str(admission.admission_date),
+        "discharge_date": str(admission.discharge_date) if admission.discharge_date else "Pending",
+        "admission_type": str(admission.admission_type.value) if hasattr(admission.admission_type, "value") else str(admission.admission_type),
+        "diagnosis": admission.diagnosis_at_admission or ["Not specified"],
+        "icd_codes": admission.icd_codes or [],
+        "treatment_plan": str(admission.treatment_plan) if admission.treatment_plan else "As documented",
+    }
 
-TREATMENT PROVIDED:
-As per treatment plan documented during admission.
+    summary = await generate_discharge_summary(name, uhid, admission_data, data.language)
 
-MEDICATIONS AT DISCHARGE:
-Please refer to the prescription provided.
+    # Translate if non-English
+    if data.language != "en":
+        summary = await translate_text(summary, "en", data.language)
 
-FOLLOW-UP INSTRUCTIONS:
-- Follow up in OPD after 1 week
-- Continue prescribed medications
-- Report immediately if symptoms worsen
-
-Generated by Health1ERP AI System
-Language: {data.language}"""
-
-    return {"admission_id": data.admission_id, "summary": summary, "language": data.language}
+    return {
+        "admission_id": data.admission_id,
+        "patient_name": name,
+        "uhid": uhid,
+        "summary": summary,
+        "language": data.language,
+    }
 
 
 @router.post("/translate")
@@ -249,12 +253,44 @@ async def translate_medical_text(
     data: TranslateRequest,
     user: User = Depends(RoleChecker("ipd:read")),
 ):
-    """Translate medical text between languages. In production, uses AI translation."""
-    # Simplified - in production would use OpenAI or specialized medical translation API
+    """Translate medical text between 6 supported languages.
+
+    Uses OpenAI for full translation when configured. Falls back to
+    medical term replacement dictionary for common clinical terms.
+    Supports: en, hi, ar, es, fr, zh.
+    """
+    translated = await translate_text(
+        text=data.text,
+        source_language=data.source_language,
+        target_language=data.target_language,
+        preserve_medical_terms=data.preserve_medical_terms,
+    )
     return {
         "original": data.text,
-        "translated": f"[{data.target_language.upper()} Translation] {data.text}",
+        "translated": translated,
         "source_language": data.source_language,
         "target_language": data.target_language,
-        "note": "Full AI translation available when OPENAI_API_KEY is configured",
+    }
+
+
+@router.post("/patient-instructions")
+async def get_patient_instructions(
+    data: LocalizedInstructionsRequest,
+    user: User = Depends(RoleChecker("ipd:read")),
+):
+    """Get pre-translated patient instructions by type and language.
+
+    Instruction types: post_discharge, diet_general, wound_care.
+    Available in: en, hi, ar.
+    """
+    instructions = get_localized_instructions(data.instruction_type, data.language)
+    if not instructions:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No instructions found for type '{data.instruction_type}' in language '{data.language}'",
+        )
+    return {
+        "instruction_type": data.instruction_type,
+        "language": data.language,
+        "instructions": instructions,
     }
