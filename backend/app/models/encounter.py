@@ -1,7 +1,7 @@
 """OPD Encounter model for clinical documentation."""
 import enum
 
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum, Float
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum, Float, Integer
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
@@ -54,6 +54,9 @@ class Encounter(Base):
 
     # Template used
     template_used = Column(String(50), nullable=True)
+
+    # Optimistic locking version
+    version = Column(Integer, default=1, nullable=False)
 
     # Relationships
     patient = relationship("Patient")

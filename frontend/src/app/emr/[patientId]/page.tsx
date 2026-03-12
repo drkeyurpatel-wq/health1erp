@@ -10,13 +10,18 @@ import { VitalsPanel, type Vitals } from "@/components/emr/vitals-panel";
 import { CDSSSidebar } from "@/components/emr/cdss-sidebar";
 import { OrderEntry } from "@/components/emr/order-entry";
 import { EncounterHistory, type PastEncounter } from "@/components/emr/encounter-history";
+import { LabResultsPanel } from "@/components/emr/lab-results-panel";
+import { RadiologyViewer } from "@/components/emr/radiology-viewer";
+import { ProblemList } from "@/components/emr/problem-list";
+import { FollowUpScheduler } from "@/components/emr/follow-up-scheduler";
 import { useToast } from "@/contexts/toast-context";
 import api from "@/lib/api";
 import type { Patient } from "@/types";
 import {
   Save, Lock, Printer, Brain, Clock, ChevronDown,
   Loader2, CheckCircle2, FileText, ArrowLeft,
-  History, Download,
+  History, Download, FlaskConical, ScanLine,
+  ClipboardList, Calendar, AlertCircle,
 } from "lucide-react";
 
 // ── ICD-10 local database (subset for offline search) ────────────────────────
@@ -139,6 +144,23 @@ export default function EMREncounterPage() {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [encounterLocked, setEncounterLocked] = useState(false);
+
+  // ── Concurrent edit detection ──
+  const [encounterVersion, setEncounterVersion] = useState<number>(1);
+  const [conflictDetected, setConflictDetected] = useState(false);
+  const [conflictInfo, setConflictInfo] = useState<any>(null);
+
+  // ── New panels visibility ──
+  const [showLabResults, setShowLabResults] = useState(false);
+  const [showRadiology, setShowRadiology] = useState(false);
+  const [showProblemList, setShowProblemList] = useState(false);
+  const [showFollowUps, setShowFollowUps] = useState(false);
+  const [labResultCount, setLabResultCount] = useState(0);
+  const [abnormalLabCount, setAbnormalLabCount] = useState(0);
+  const [radiologyStudyCount, setRadiologyStudyCount] = useState(0);
+
+  // ── Dose validation warnings ──
+  const [doseWarnings, setDoseWarnings] = useState<any[]>([]);
 
   // ── Load patient data ──
   useEffect(() => {
@@ -306,6 +328,40 @@ export default function EMREncounterPage() {
     }
   }, [medOrders, patient, checkAllergies]);
 
+  // ── Dose validation when meds change ──
+  const validateDoses = useCallback(async (meds: any[]) => {
+    if (meds.length === 0) { setDoseWarnings([]); return; }
+    try {
+      const medications = meds.map(m => {
+        // Parse dose from medication name (e.g., "Paracetamol 500mg")
+        const match = m.name.match(/([\d.]+)\s*(mg|g|mcg)/i);
+        return {
+          name: m.name.split(/\s+\d/)[0].trim(),
+          dose_value: match ? match[1] : m.dosage,
+          dose_unit: match ? match[2] : "mg",
+          route: m.route || "oral",
+        };
+      });
+      const { data } = await api.post("/pharmacy/validate-dose", medications);
+      const critical = (data.results || []).filter((r: any) => !r.valid || (r.warnings?.length > 0 && r.drug_found));
+      setDoseWarnings(critical);
+      if (data.has_critical_warnings) {
+        toast("error", "DOSE WARNING", "One or more medications have dose range concerns");
+      }
+    } catch {
+      // Non-critical
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (medOrders.length > 0) {
+      const timer = setTimeout(() => validateDoses(medOrders), 800);
+      return () => clearTimeout(timer);
+    } else {
+      setDoseWarnings([]);
+    }
+  }, [medOrders, validateDoses]);
+
   // ── Check Drug Interactions ──
   const checkInteractions = useCallback(async () => {
     if (medOrders.length < 2) {
@@ -424,12 +480,31 @@ export default function EMREncounterPage() {
         ai_recommendations: recommendations.length > 0 ? recommendations : null,
       };
 
-      // Save to encounters API
+      // Save to encounters API (with optimistic locking)
       if (currentEncounterId) {
-        await api.put(`/encounters/${currentEncounterId}`, encounterPayload);
+        try {
+          const { data } = await api.put(`/encounters/${currentEncounterId}`, {
+            ...encounterPayload,
+            version: encounterVersion,
+          });
+          setEncounterVersion(data.version || encounterVersion + 1);
+          setConflictDetected(false);
+          setConflictInfo(null);
+        } catch (err: any) {
+          if (err.response?.status === 409) {
+            const detail = err.response.data?.detail;
+            setConflictDetected(true);
+            setConflictInfo(detail);
+            setSaving(false);
+            toast("error", "EDIT CONFLICT", detail?.message || "Another user modified this encounter. Please reload.");
+            return;
+          }
+          throw err;
+        }
       } else {
         const { data } = await api.post("/encounters", encounterPayload);
         setCurrentEncounterId(data.id);
+        setEncounterVersion(data.version || 1);
       }
 
       // Also save as doctor round if admitted
@@ -467,7 +542,7 @@ export default function EMREncounterPage() {
     } finally {
       setSaving(false);
     }
-  }, [patient, patientId, currentEncounterId, activeAdmission, subjective, objective, assessment, plan, vitals, selectedIcds, medOrders, labOrders, radOrders, followUp, news2Score, alerts, differentials, recommendations, toast]);
+  }, [patient, patientId, currentEncounterId, activeAdmission, subjective, objective, assessment, plan, vitals, selectedIcds, medOrders, labOrders, radOrders, followUp, news2Score, alerts, differentials, recommendations, encounterVersion, toast]);
 
   // ── Download prescription PDF ──
   const downloadPrescription = useCallback(async () => {
@@ -613,6 +688,220 @@ export default function EMREncounterPage() {
             ))}
           </div>
           <p className="text-[10px] text-red-500 mt-2 ml-10">Remove conflicting medications or document clinical override before signing.</p>
+        </div>
+      )}
+
+      {/* ── Concurrent Edit Conflict Banner ───────────────────── */}
+      {conflictDetected && (
+        <div className="mb-4 bg-orange-50 border-2 border-orange-300 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-8 w-8 rounded-full bg-orange-500 flex items-center justify-center">
+              <AlertCircle className="h-5 w-5 text-white" />
+            </div>
+            <h3 className="text-sm font-bold text-orange-800">CONCURRENT EDIT CONFLICT</h3>
+          </div>
+          <p className="text-xs text-orange-700 ml-10">
+            {conflictInfo?.message || "This encounter was modified by another user. Your changes could not be saved."}
+          </p>
+          <div className="flex gap-2 ml-10 mt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                // Reload encounter from server
+                if (currentEncounterId) {
+                  try {
+                    const { data } = await api.get(`/encounters/${currentEncounterId}`);
+                    setSubjective(data.subjective || "");
+                    setObjective(data.objective || "");
+                    setAssessment(data.assessment || "");
+                    setPlan(data.plan || "");
+                    setEncounterVersion(data.version || 1);
+                    setConflictDetected(false);
+                    setConflictInfo(null);
+                    toast("info", "Reloaded", "Encounter data refreshed from server");
+                  } catch {
+                    toast("error", "Error", "Failed to reload encounter");
+                  }
+                }
+              }}
+            >
+              Reload Latest Version
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => {
+                // Force save with latest version
+                setEncounterVersion(conflictInfo?.server_version || encounterVersion);
+                setConflictDetected(false);
+                setConflictInfo(null);
+              }}
+            >
+              Override & Save My Changes
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Dose Validation Warnings ─────────────────────────── */}
+      {doseWarnings.length > 0 && (
+        <div className="mb-4 bg-amber-50 border-2 border-amber-200 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-8 w-8 rounded-full bg-amber-500 flex items-center justify-center">
+              <AlertCircle className="h-5 w-5 text-white" />
+            </div>
+            <h3 className="text-sm font-bold text-amber-800">DOSE RANGE WARNINGS</h3>
+            <Badge variant="warning">{doseWarnings.length} warning{doseWarnings.length > 1 ? "s" : ""}</Badge>
+          </div>
+          <div className="space-y-1.5 ml-10">
+            {doseWarnings.map((w, i) => (
+              <div key={i} className="text-xs text-amber-700">
+                <span className="font-bold">{w.medication}</span>
+                {w.warnings?.map((warning: string, j: number) => (
+                  <p key={j} className="ml-2">{warning}</p>
+                ))}
+                {w.info && (
+                  <p className="ml-2 text-amber-500">
+                    Safe range: {w.info.min_dose}-{w.info.max_dose}{w.info.unit} ({w.info.route}) | Max daily: {w.info.max_daily}{w.info.unit}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Quick Access Panels Row ──────────────────────────── */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <Button
+          size="sm"
+          variant={showLabResults ? "default" : "outline"}
+          onClick={() => setShowLabResults(!showLabResults)}
+          className="h-8"
+        >
+          <FlaskConical className="h-3.5 w-3.5 mr-1" />
+          Lab Results
+          {labResultCount > 0 && <Badge variant={abnormalLabCount > 0 ? "danger" : "success"} className="ml-1 text-[9px] h-4 min-w-[16px]">{labResultCount}</Badge>}
+        </Button>
+        <Button
+          size="sm"
+          variant={showRadiology ? "default" : "outline"}
+          onClick={() => setShowRadiology(!showRadiology)}
+          className="h-8"
+        >
+          <ScanLine className="h-3.5 w-3.5 mr-1" />
+          Radiology
+          {radiologyStudyCount > 0 && <Badge variant="secondary" className="ml-1 text-[9px] h-4 min-w-[16px]">{radiologyStudyCount}</Badge>}
+        </Button>
+        <Button
+          size="sm"
+          variant={showProblemList ? "default" : "outline"}
+          onClick={() => setShowProblemList(!showProblemList)}
+          className="h-8"
+        >
+          <ClipboardList className="h-3.5 w-3.5 mr-1" />
+          Problem List
+        </Button>
+        <Button
+          size="sm"
+          variant={showFollowUps ? "default" : "outline"}
+          onClick={() => setShowFollowUps(!showFollowUps)}
+          className="h-8"
+        >
+          <Calendar className="h-3.5 w-3.5 mr-1" />
+          Follow-ups
+        </Button>
+      </div>
+
+      {/* ── Lab Results Panel ────────────────────────────────── */}
+      {showLabResults && (
+        <div className="mb-6 bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                <FlaskConical className="h-4 w-4 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900 text-sm">Lab Results</h2>
+                <p className="text-[11px] text-gray-500">Completed lab orders with results and interpretations</p>
+              </div>
+            </div>
+            <button onClick={() => setShowLabResults(false)} className="text-xs text-gray-400 hover:text-gray-600">Close</button>
+          </div>
+          <LabResultsPanel
+            patientId={patientId as string}
+            onResultCount={(count, abnormal) => { setLabResultCount(count); setAbnormalLabCount(abnormal); }}
+          />
+        </div>
+      )}
+
+      {/* ── Radiology / PACS Viewer ─────────────────────────── */}
+      {showRadiology && (
+        <div className="mb-6 bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-purple-100 flex items-center justify-center">
+                <ScanLine className="h-4 w-4 text-purple-600" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900 text-sm">Radiology / PACS Viewer</h2>
+                <p className="text-[11px] text-gray-500">Imaging studies, reports, and image viewer</p>
+              </div>
+            </div>
+            <button onClick={() => setShowRadiology(false)} className="text-xs text-gray-400 hover:text-gray-600">Close</button>
+          </div>
+          <RadiologyViewer
+            patientId={patientId as string}
+            onStudyCount={setRadiologyStudyCount}
+          />
+        </div>
+      )}
+
+      {/* ── Problem List ────────────────────────────────────── */}
+      {showProblemList && (
+        <div className="mb-6 bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-red-100 flex items-center justify-center">
+                <ClipboardList className="h-4 w-4 text-red-600" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900 text-sm">Problem List</h2>
+                <p className="text-[11px] text-gray-500">Active and resolved diagnoses tracking</p>
+              </div>
+            </div>
+            <button onClick={() => setShowProblemList(false)} className="text-xs text-gray-400 hover:text-gray-600">Close</button>
+          </div>
+          <ProblemList
+            patientId={patientId as string}
+            encounterId={currentEncounterId}
+            selectedIcds={selectedIcds}
+            readOnly={encounterLocked}
+          />
+        </div>
+      )}
+
+      {/* ── Follow-up Scheduling ────────────────────────────── */}
+      {showFollowUps && (
+        <div className="mb-6 bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                <Calendar className="h-4 w-4 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="font-bold text-gray-900 text-sm">Follow-up Scheduling</h2>
+                <p className="text-[11px] text-gray-500">Structured follow-up visits with review items</p>
+              </div>
+            </div>
+            <button onClick={() => setShowFollowUps(false)} className="text-xs text-gray-400 hover:text-gray-600">Close</button>
+          </div>
+          <FollowUpScheduler
+            patientId={patientId as string}
+            encounterId={currentEncounterId}
+            readOnly={encounterLocked}
+          />
         </div>
       )}
 

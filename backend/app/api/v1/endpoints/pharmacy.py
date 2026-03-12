@@ -116,3 +116,60 @@ async def check_drug_interactions(
                         recommendation="Monitor patient closely. Consider alternative if possible.",
                     ))
     return interactions
+
+
+@router.post("/validate-dose")
+async def validate_medication_dose(
+    medications: list[dict],
+    user: User = Depends(RoleChecker("pharmacy:read")),
+):
+    """Validate medication doses against safe range database.
+
+    Each medication dict should have: name, dose_value (numeric), dose_unit, route.
+    Returns validation results with warnings for out-of-range doses.
+    """
+    import re
+    from app.ai.dose_range_db import validate_dose
+
+    results = []
+    for med in medications:
+        name = med.get("name", "")
+        route = med.get("route", "oral")
+
+        # Extract numeric dose from various formats
+        dose_str = str(med.get("dose_value", med.get("dosage", "")))
+        dose_match = re.search(r"([\d.]+)", dose_str)
+        dose_mg = float(dose_match.group(1)) if dose_match else 0
+
+        # Convert common units to mg
+        dose_unit = med.get("dose_unit", "mg").lower()
+        if dose_unit == "g":
+            dose_mg *= 1000
+        elif dose_unit == "mcg":
+            dose_mg /= 1000
+
+        if dose_mg > 0:
+            validation = validate_dose(name, dose_mg, route)
+            results.append({
+                "medication": name,
+                "dose_checked": dose_mg,
+                "route": route,
+                **validation,
+            })
+        else:
+            results.append({
+                "medication": name,
+                "dose_checked": 0,
+                "route": route,
+                "valid": True,
+                "warnings": ["Could not parse dose value"],
+                "info": None,
+                "drug_found": False,
+            })
+
+    has_warnings = any(not r["valid"] for r in results)
+    return {
+        "medications_checked": len(results),
+        "has_critical_warnings": has_warnings,
+        "results": results,
+    }

@@ -4,7 +4,7 @@ from app.api.v1.endpoints import (
     auth, patients, appointments, ipd, billing,
     inventory, pharmacy, laboratory, radiology, ot,
     reports, ai, audit, organizations, encounters, documents,
-    consents, quality,
+    consents, quality, problem_list, follow_ups,
 )
 
 api_router = APIRouter()
@@ -27,3 +27,5 @@ api_router.include_router(organizations.router, prefix="/organizations", tags=["
 api_router.include_router(documents.router, prefix="/documents", tags=["Document Downloads"])
 api_router.include_router(consents.router, prefix="/consents", tags=["Patient Consents"])
 api_router.include_router(quality.router, prefix="/quality", tags=["Quality Metrics"])
+api_router.include_router(problem_list.router, prefix="/problem-list", tags=["Problem List"])
+api_router.include_router(follow_ups.router, prefix="/follow-ups", tags=["Follow-up Scheduling"])

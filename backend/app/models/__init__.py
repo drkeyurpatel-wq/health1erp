@@ -13,6 +13,8 @@ from app.models.audit import AuditLog
 from app.models.organization import Organization, Facility
 from app.models.encounter import Encounter
 from app.models.consent import PatientConsent, PrivacyPreference
+from app.models.problem_list import ProblemListEntry
+from app.models.follow_up import FollowUp
 
 __all__ = [
     "User", "Patient", "Appointment",
@@ -28,4 +30,6 @@ __all__ = [
     "Organization", "Facility",
     "Encounter",
     "PatientConsent", "PrivacyPreference",
+    "ProblemListEntry",
+    "FollowUp",
 ]

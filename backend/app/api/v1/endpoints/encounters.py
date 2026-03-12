@@ -76,6 +76,8 @@ class EncounterCreate(BaseModel):
     ai_alerts: list[dict] | None = None
     ai_differentials: list[dict] | None = None
     ai_recommendations: list[str] | None = None
+    # Optimistic locking — client sends the version it read
+    version: int | None = None
 
 
 class AmendmentRequest(BaseModel):
@@ -121,6 +123,7 @@ class EncounterResponse(BaseModel):
     ai_recommendations: list | None
     news2_score: float | None
     template_used: str | None
+    version: int = 1
     created_at: datetime
     updated_at: datetime
     # Joined fields
@@ -237,6 +240,19 @@ async def update_encounter(
     if encounter.status == EncounterStatus.Signed:
         raise HTTPException(status_code=400, detail="Cannot edit a signed encounter. Use the amend endpoint instead.")
 
+    # Optimistic locking: check version if client sent one
+    if data.version is not None and encounter.version != data.version:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "CONCURRENT_EDIT_CONFLICT",
+                "message": "This encounter was modified by another user since you loaded it. Please reload and try again.",
+                "server_version": encounter.version,
+                "client_version": data.version,
+                "updated_at": encounter.updated_at.isoformat() if encounter.updated_at else None,
+            },
+        )
+
     encounter.subjective = data.subjective
     encounter.objective = data.objective
     encounter.assessment = data.assessment
@@ -259,6 +275,9 @@ async def update_encounter(
         encounter.ai_recommendations = data.ai_recommendations
     if data.sign:
         encounter.status = EncounterStatus.Signed
+
+    # Increment version for optimistic locking
+    encounter.version = (encounter.version or 1) + 1
 
     await db.flush()
     await db.refresh(encounter)
