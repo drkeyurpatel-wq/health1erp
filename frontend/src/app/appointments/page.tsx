@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Modal } from "@/components/ui/modal";
+import Link from "next/link";
 import {
   Calendar,
   Plus,
@@ -22,6 +23,7 @@ import {
   ChevronRight,
   Stethoscope,
   AlertCircle,
+  FileHeart,
   Building2,
 } from "lucide-react";
 import { EmptyState } from "@/components/common/empty-state";
@@ -427,14 +429,23 @@ export default function AppointmentsPage() {
                         </p>
                       )}
                     </div>
-                    <Badge
-                      variant={
-                        q.status === "InProgress" ? "warning" : "default"
-                      }
-                      dot
-                    >
-                      {q.status}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <Badge
+                        variant={
+                          q.status === "InProgress" ? "warning" : "default"
+                        }
+                        dot
+                      >
+                        {q.status}
+                      </Badge>
+                      {q.patient_id && (
+                        <Link href={`/emr/${q.patient_id}`}>
+                          <Button size="sm" variant="gradient" className="h-7 text-[11px]">
+                            <FileHeart className="h-3 w-3 mr-1" />Consult
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -565,6 +576,14 @@ export default function AppointmentsPage() {
                                   <XCircle className="h-3.5 w-3.5" />
                                 </Button>
                               </>
+                            )}
+                            {(a.status === "Confirmed" || a.status === "InProgress") && a.patient_id && (
+                              <Link href={`/emr/${a.patient_id}`}>
+                                <Button size="sm" variant="gradient">
+                                  <FileHeart className="h-3.5 w-3.5 mr-1" />
+                                  Consult
+                                </Button>
+                              </Link>
                             )}
                             {a.status === "InProgress" && (
                               <Button

@@ -11,6 +11,7 @@ from app.models.radiology import RadiologyExam, RadiologyOrder, RadiologyReport
 from app.models.ot import OTBooking, OTRoom
 from app.models.audit import AuditLog
 from app.models.organization import Organization, Facility
+from app.models.encounter import Encounter
 
 __all__ = [
     "User", "Patient", "Appointment",
@@ -24,4 +25,5 @@ __all__ = [
     "OTBooking", "OTRoom",
     "AuditLog",
     "Organization", "Facility",
+    "Encounter",
 ]

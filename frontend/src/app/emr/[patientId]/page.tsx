@@ -9,12 +9,14 @@ import { SOAPEditor } from "@/components/emr/soap-editor";
 import { VitalsPanel, type Vitals } from "@/components/emr/vitals-panel";
 import { CDSSSidebar } from "@/components/emr/cdss-sidebar";
 import { OrderEntry } from "@/components/emr/order-entry";
+import { EncounterHistory, type PastEncounter } from "@/components/emr/encounter-history";
 import { useToast } from "@/contexts/toast-context";
 import api from "@/lib/api";
 import type { Patient } from "@/types";
 import {
   Save, Lock, Printer, Brain, Clock, ChevronDown,
   Loader2, CheckCircle2, FileText, ArrowLeft,
+  History, Download,
 } from "lucide-react";
 
 // ── ICD-10 local database (subset for offline search) ────────────────────────
@@ -124,6 +126,12 @@ export default function EMREncounterPage() {
   const [availableLabTests, setAvailableLabTests] = useState<any[]>([]);
   const [availableRadExams, setAvailableRadExams] = useState<any[]>([]);
 
+  // ── Encounter history ──
+  const [pastEncounters, setPastEncounters] = useState<PastEncounter[]>([]);
+  const [encountersLoading, setEncountersLoading] = useState(false);
+  const [currentEncounterId, setCurrentEncounterId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
   // ── UI State ──
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
@@ -147,7 +155,40 @@ export default function EMREncounterPage() {
     }).catch(() => {
       toast("error", "Error", "Failed to load patient data");
     }).finally(() => setLoading(false));
+
+    // Load encounter history
+    setEncountersLoading(true);
+    api.get(`/encounters/patient/${patientId}?limit=20`).then(r => {
+      setPastEncounters(Array.isArray(r.data) ? r.data : []);
+    }).catch(() => {}).finally(() => setEncountersLoading(false));
   }, [patientId]);
+
+  // ── Load past encounter into editor ──
+  const loadPastEncounter = useCallback((enc: PastEncounter) => {
+    if (encounterLocked) return;
+    setSubjective(enc.subjective || "");
+    setObjective(enc.objective || "");
+    setAssessment(enc.assessment || "");
+    setPlan(enc.plan || "");
+    if (enc.vitals) {
+      setVitals({
+        temperature: enc.vitals.temperature ?? null,
+        bp_systolic: enc.vitals.bp_systolic ?? null,
+        bp_diastolic: enc.vitals.bp_diastolic ?? null,
+        pulse: enc.vitals.pulse ?? null,
+        spo2: enc.vitals.spo2 ?? null,
+        respiratory_rate: enc.vitals.respiratory_rate ?? null,
+        pain_score: enc.vitals.pain_score ?? null,
+        gcs: enc.vitals.gcs ?? null,
+      });
+    }
+    if (enc.icd_codes) setSelectedIcds(enc.icd_codes);
+    if (enc.medications) setMedOrders(enc.medications.map((m, i) => ({ id: `loaded-${i}`, ...m })));
+    if (enc.lab_orders) setLabOrders(enc.lab_orders.map(l => ({ test_id: l.test_name.toLowerCase().replace(/\s+/g, "_"), ...l })));
+    if (enc.radiology_orders) setRadOrders(enc.radiology_orders.map(r => ({ exam_id: r.exam_name.toLowerCase().replace(/\s+/g, "_"), ...r })));
+    if (enc.follow_up) setFollowUp(enc.follow_up);
+    toast("info", "Encounter Loaded", "Previous encounter data loaded into editor");
+  }, [encounterLocked, toast]);
 
   // ── ICD-10 search ──
   const handleIcdSearch = useCallback((query: string) => {
@@ -319,7 +360,40 @@ export default function EMREncounterPage() {
     if (!patient) return;
     setSaving(true);
     try {
-      // If there's an active admission, save as a doctor round
+      const encounterPayload = {
+        patient_id: patientId,
+        admission_id: activeAdmission?.id || undefined,
+        encounter_date: new Date().toISOString(),
+        subjective,
+        objective,
+        assessment,
+        plan,
+        vitals: {
+          temperature: vitals.temperature, bp_systolic: vitals.bp_systolic,
+          bp_diastolic: vitals.bp_diastolic, pulse: vitals.pulse,
+          spo2: vitals.spo2, respiratory_rate: vitals.respiratory_rate,
+          pain_score: vitals.pain_score, gcs: vitals.gcs,
+        },
+        icd_codes: selectedIcds.map(i => ({ code: i.code, description: i.description })),
+        medications: medOrders.map(m => ({
+          name: m.name, dosage: m.dosage || "", frequency: m.frequency || "",
+          route: m.route || "Oral", duration: m.duration || "", instructions: m.instructions || "",
+        })),
+        lab_orders: labOrders.map(l => ({ test_name: l.test_name, category: l.category || "" })),
+        radiology_orders: radOrders.map(r => ({ exam_name: r.exam_name, modality: r.modality || "" })),
+        follow_up: followUp,
+        sign: lock,
+      };
+
+      // Save to encounters API
+      if (currentEncounterId) {
+        await api.put(`/encounters/${currentEncounterId}`, encounterPayload);
+      } else {
+        const { data } = await api.post("/encounters", encounterPayload);
+        setCurrentEncounterId(data.id);
+      }
+
+      // Also save as doctor round if admitted
       if (activeAdmission) {
         const vitalsPayload: Record<string, any> = {};
         if (vitals.temperature) vitalsPayload.temperature = vitals.temperature;
@@ -331,21 +405,51 @@ export default function EMREncounterPage() {
 
         await api.post(`/ipd/admissions/${activeAdmission.id}/rounds`, {
           round_datetime: new Date().toISOString(),
-          findings: `SUBJECTIVE:\n${subjective}\n\nOBJECTIVE:\n${objective}\n\nASSESSMENT:\n${assessment}\n\nICD-10: ${selectedIcds.map(i => `${i.code} - ${i.description}`).join(", ")}`,
+          findings: `SUBJECTIVE:\n${subjective}\n\nOBJECTIVE:\n${objective}\n\nASSESSMENT:\n${assessment}`,
           vitals: Object.keys(vitalsPayload).length > 0 ? vitalsPayload : undefined,
-          instructions: `PLAN:\n${plan}\n\nFOLLOW-UP: ${followUp}\n\nMEDICATIONS:\n${medOrders.map(m => `${m.name} - ${m.frequency} - ${m.route} - ${m.duration}`).join("\n")}\n\nLABS: ${labOrders.map(l => l.test_name).join(", ")}\n\nRADIOLOGY: ${radOrders.map(r => r.exam_name).join(", ")}`,
-        });
+          instructions: `PLAN:\n${plan}\n\nFOLLOW-UP: ${followUp}`,
+        }).catch(() => {}); // Non-critical if round save fails
       }
+
+      // Clear localStorage draft after successful save
+      localStorage.removeItem(`emr_draft_${patientId}`);
 
       setLastSaved(new Date().toLocaleTimeString());
       if (lock) setEncounterLocked(true);
+
+      // Refresh encounter history
+      api.get(`/encounters/patient/${patientId}?limit=20`).then(r => {
+        setPastEncounters(Array.isArray(r.data) ? r.data : []);
+      }).catch(() => {});
+
       toast("success", lock ? "Encounter Signed" : "Encounter Saved", lock ? "Encounter has been signed and locked" : "Draft saved successfully");
     } catch {
       toast("error", "Save Failed", "Could not save encounter");
     } finally {
       setSaving(false);
     }
-  }, [patient, activeAdmission, subjective, objective, assessment, plan, vitals, selectedIcds, medOrders, labOrders, radOrders, followUp, toast]);
+  }, [patient, patientId, currentEncounterId, activeAdmission, subjective, objective, assessment, plan, vitals, selectedIcds, medOrders, labOrders, radOrders, followUp, toast]);
+
+  // ── Download prescription PDF ──
+  const downloadPrescription = useCallback(async () => {
+    if (!currentEncounterId) {
+      toast("warning", "Save First", "Save the encounter before downloading the prescription");
+      return;
+    }
+    try {
+      const response = await api.get(`/documents/prescription/${currentEncounterId}`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Prescription_${patient?.uhid || ""}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast("error", "Download Failed", "Could not download prescription PDF");
+    }
+  }, [currentEncounterId, patient, toast]);
 
   // ── Auto-save every 60s ──
   useEffect(() => {
@@ -418,6 +522,12 @@ export default function EMREncounterPage() {
               <Lock className="h-3 w-3 mr-1" />Signed & Locked
             </Badge>
           )}
+          <Button size="sm" variant="outline" onClick={() => setShowHistory(!showHistory)}>
+            <History className="h-4 w-4 mr-1" />History {pastEncounters.length > 0 && `(${pastEncounters.length})`}
+          </Button>
+          <Button size="sm" variant="outline" onClick={downloadPrescription} disabled={!currentEncounterId || medOrders.length === 0}>
+            <Download className="h-4 w-4 mr-1" />Rx PDF
+          </Button>
           <Button size="sm" variant="outline" onClick={() => window.print()}>
             <Printer className="h-4 w-4 mr-1" />Print
           </Button>
@@ -441,6 +551,27 @@ export default function EMREncounterPage() {
           alertCount={alerts.filter(a => a.severity === "critical" || a.severity === "high").length}
         />
       </div>
+
+      {/* ── Encounter History Panel (collapsible) ────────────────── */}
+      {showHistory && (
+        <div className="mb-6 bg-white rounded-2xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <History className="h-5 w-5 text-primary-500" />
+              <h2 className="font-bold text-gray-900 text-sm">Encounter History</h2>
+              <Badge variant="secondary">{pastEncounters.length} encounters</Badge>
+            </div>
+            <button onClick={() => setShowHistory(false)} className="text-xs text-gray-400 hover:text-gray-600">
+              Close
+            </button>
+          </div>
+          <EncounterHistory
+            encounters={pastEncounters}
+            loading={encountersLoading}
+            onLoadEncounter={loadPastEncounter}
+          />
+        </div>
+      )}
 
       {/* ── Main Layout: Editor + CDSS Sidebar ─────────────────── */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
