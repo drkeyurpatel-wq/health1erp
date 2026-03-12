@@ -19,6 +19,10 @@ from app.models.inventory import Item, ItemBatch, Supplier
 from app.models.pharmacy import Prescription, PrescriptionStatus, PrescriptionItem
 from app.models.laboratory import LabTest, LabOrder, LabOrderStatus, LabPriority, LabResult
 from app.models.ot import OTRoom
+from app.models.encounter import Encounter, EncounterStatus
+from app.models.radiology import RadiologyExam, RadiologyOrder, RadiologyReport, Modality, RadOrderStatus
+from app.models.problem_list import ProblemListEntry, ProblemStatus, ProblemSeverity
+from app.models.follow_up import FollowUp, FollowUpStatus, FollowUpPriority
 
 
 random.seed(42)
@@ -1129,9 +1133,636 @@ async def seed():
             await db.flush()
 
             # ==================================================================
+            # 14. RADIOLOGY EXAMS (Catalog)
+            # ==================================================================
+            rad_exam_data = [
+                ("Chest X-Ray PA View", Modality.XRay, "Chest", 500.0),
+                ("Chest X-Ray AP View", Modality.XRay, "Chest", 500.0),
+                ("X-Ray Knee AP/Lateral", Modality.XRay, "Knee", 600.0),
+                ("X-Ray Spine Lumbosacral", Modality.XRay, "Spine", 700.0),
+                ("X-Ray Abdomen Erect", Modality.XRay, "Abdomen", 500.0),
+                ("X-Ray Pelvis AP", Modality.XRay, "Pelvis", 600.0),
+                ("CT Brain Plain", Modality.CT, "Head", 3500.0),
+                ("CT Brain with Contrast", Modality.CT, "Head", 5500.0),
+                ("HRCT Chest", Modality.CT, "Chest", 4500.0),
+                ("CT Abdomen with Contrast", Modality.CT, "Abdomen", 6000.0),
+                ("CT KUB", Modality.CT, "Abdomen", 4000.0),
+                ("MRI Brain with Contrast", Modality.MRI, "Head", 8000.0),
+                ("MRI Knee", Modality.MRI, "Knee", 7000.0),
+                ("MRI Lumbar Spine", Modality.MRI, "Spine", 7500.0),
+                ("USG Abdomen", Modality.Ultrasound, "Abdomen", 1200.0),
+                ("USG Pelvis", Modality.Ultrasound, "Pelvis", 1200.0),
+                ("USG Obstetric", Modality.Ultrasound, "Pelvis", 1500.0),
+                ("2D Echocardiography", Modality.Ultrasound, "Chest", 2500.0),
+                ("USG Neck / Thyroid", Modality.Ultrasound, "Neck", 1200.0),
+            ]
+            rad_exam_objs = []
+            for name, modality, body_part, price in rad_exam_data:
+                exam = RadiologyExam(name=name, modality=modality, body_part=body_part, price=price)
+                db.add(exam)
+                rad_exam_objs.append(exam)
+            await db.flush()
+
+            # ==================================================================
+            # 15. ENCOUNTERS (30) — Full SOAP notes for OPD + IPD patients
+            # ==================================================================
+            encounter_templates = [
+                # (complaint, subjective, objective, assessment, plan, icd_codes, diagnoses, medications, lab_orders_json, rad_orders_json, template, follow_up_text)
+                (
+                    "Fever and body aches",
+                    "Patient complains of high-grade fever (102°F) for 3 days with generalized body aches, headache, and malaise. No cough, cold, or breathlessness. No urinary symptoms. Appetite reduced.",
+                    "Temp 102.2°F, PR 98/min, BP 120/78. Throat congested. No lymphadenopathy. Chest clear. Abdomen soft, non-tender.",
+                    "Acute febrile illness — likely viral. Dengue/Malaria to be ruled out.",
+                    "CBC, Dengue NS1/IgM, Malaria smear ordered. Tab Paracetamol 650mg TDS x 5 days. Plenty of oral fluids. Review with reports in 3 days.",
+                    [{"code": "R50.9", "description": "Fever, unspecified"}],
+                    ["Acute febrile illness"],
+                    [{"name": "Paracetamol", "dosage": "650mg", "frequency": "TDS", "route": "Oral", "duration": "5 days", "instructions": "Take after food"}],
+                    [{"test_name": "CBC", "category": "Hematology"}, {"test_name": "Dengue NS1 Antigen", "category": "Serology"}],
+                    [],
+                    "general",
+                    "Review with reports in 3 days",
+                ),
+                (
+                    "Chest pain on exertion",
+                    "55-year-old male presents with retrosternal chest pain on exertion for 2 weeks. Pain relieved by rest. History of hypertension on Amlodipine 5mg. Smoker 20 pack-years. No diabetes. Family history of CAD (father had MI at age 50).",
+                    "BP 148/92, PR 82/min regular, SpO2 98%. JVP not raised. Heart sounds S1S2 normal, no murmurs. Chest clear. Pedal edema absent.",
+                    "Angina pectoris — Stable. Rule out ACS. Uncontrolled hypertension.",
+                    "ECG done — normal sinus rhythm, no ST changes. Trop-I negative. Lipid profile, HbA1c ordered. 2D Echo planned. Tab Aspirin 150mg OD, Tab Atorvastatin 40mg HS. Amlodipine increased to 10mg. Lifestyle modification counseled. Stress test next week.",
+                    [{"code": "I20.9", "description": "Angina pectoris, unspecified"}, {"code": "I10", "description": "Essential hypertension"}],
+                    ["Stable angina pectoris", "Essential hypertension"],
+                    [{"name": "Aspirin", "dosage": "150mg", "frequency": "OD", "route": "Oral", "duration": "3 months", "instructions": "Take after food"}, {"name": "Atorvastatin", "dosage": "40mg", "frequency": "HS", "route": "Oral", "duration": "3 months", "instructions": "Take at bedtime"}, {"name": "Amlodipine", "dosage": "10mg", "frequency": "OD", "route": "Oral", "duration": "1 month", "instructions": "Take in the morning"}],
+                    [{"test_name": "Lipid Profile", "category": "Biochemistry"}, {"test_name": "HbA1c", "category": "Biochemistry"}, {"test_name": "ECG", "category": "Cardiac"}],
+                    [{"exam_name": "2D Echocardiography", "modality": "Ultrasound"}],
+                    "cardiology",
+                    "Stress test in 1 week. Review with reports.",
+                ),
+                (
+                    "Diabetes follow-up",
+                    "Known Type 2 DM for 8 years on Metformin 1g BD + Glimepiride 2mg OD. Reports increased thirst and nocturia x 2 weeks. Last HbA1c was 8.2% (3 months ago). No hypoglycemic episodes. Compliant with medications. Diet control fair.",
+                    "BMI 28.4, BP 130/82, PR 78/min. Fundoscopy — no retinopathy. Feet — monofilament sensation intact. Pedal pulses palpable. No skin changes.",
+                    "Type 2 DM — suboptimal control. HbA1c target not met. No microvascular complications currently.",
+                    "HbA1c, FBS, PPBS, KFT, Urine ACR ordered. Add Empagliflozin 10mg OD. Continue Metformin + Glimepiride. Diet counseling reinforced. Review in 1 month with reports.",
+                    [{"code": "E11.65", "description": "Type 2 DM with hyperglycemia"}],
+                    ["Type 2 Diabetes Mellitus — poorly controlled"],
+                    [{"name": "Metformin", "dosage": "1000mg", "frequency": "BD", "route": "Oral", "duration": "1 month", "instructions": "Take after food"}, {"name": "Glimepiride", "dosage": "2mg", "frequency": "OD", "route": "Oral", "duration": "1 month", "instructions": "Take before breakfast"}, {"name": "Empagliflozin", "dosage": "10mg", "frequency": "OD", "route": "Oral", "duration": "1 month", "instructions": "Take in the morning"}],
+                    [{"test_name": "HbA1c", "category": "Biochemistry"}, {"test_name": "KFT", "category": "Biochemistry"}],
+                    [],
+                    "diabetology",
+                    "Review in 1 month with HbA1c and KFT reports",
+                ),
+                (
+                    "Lower back pain radiating to legs",
+                    "42-year-old female with low back pain for 6 months, now radiating to left leg. Pain worse on sitting and bending. Numbness in left foot. No bladder/bowel involvement. Works as software engineer — prolonged sitting.",
+                    "SLR positive left at 40°. Power L5 4/5 left. Ankle jerk diminished left. Lumbar lordosis reduced. Paraspinal tenderness L4-S1.",
+                    "Lumbar radiculopathy — likely L4-L5 disc prolapse. MRI lumbar spine recommended.",
+                    "MRI Lumbar Spine ordered. Tab Pregabalin 75mg BD x 2 weeks. Tab Etoricoxib 90mg OD x 7 days. Physiotherapy referral. Ergonomic advice given. Review with MRI.",
+                    [{"code": "M54.4", "description": "Lumbago with sciatica"}, {"code": "M51.16", "description": "IVD disorder with radiculopathy, lumbar"}],
+                    ["Lumbar radiculopathy", "Lumbar disc disease"],
+                    [{"name": "Pregabalin", "dosage": "75mg", "frequency": "BD", "route": "Oral", "duration": "2 weeks", "instructions": "May cause drowsiness"}, {"name": "Etoricoxib", "dosage": "90mg", "frequency": "OD", "route": "Oral", "duration": "7 days", "instructions": "Take after food"}],
+                    [],
+                    [{"exam_name": "MRI Lumbar Spine", "modality": "MRI"}],
+                    "orthopedics",
+                    "Review with MRI report in 1 week",
+                ),
+                (
+                    "Abdominal pain and vomiting",
+                    "28-year-old male with severe epigastric pain radiating to back for 12 hours. Multiple episodes of vomiting. History of alcohol binge last night. No fever. No hematemesis.",
+                    "Temp 99.4°F, PR 108/min, BP 110/70. Tenderness in epigastrium and left hypochondrium. Guarding present. Bowel sounds sluggish.",
+                    "Acute pancreatitis — likely alcohol-induced. Assess severity.",
+                    "NPO. IV fluids NS 125ml/hr. Inj Pantoprazole 40mg IV BD. Inj Ondansetron 4mg IV SOS. Serum Amylase/Lipase, LFT, CBC, RFT stat. USG Abdomen. Monitor vitals Q4H. Pain management with Tramadol 50mg IV SOS.",
+                    [{"code": "K85.9", "description": "Acute pancreatitis, unspecified"}],
+                    ["Acute pancreatitis"],
+                    [{"name": "Pantoprazole", "dosage": "40mg", "frequency": "BD", "route": "IV", "duration": "5 days", "instructions": "Slow IV push"}, {"name": "Ondansetron", "dosage": "4mg", "frequency": "SOS", "route": "IV", "duration": "3 days", "instructions": "For vomiting"}, {"name": "Tramadol", "dosage": "50mg", "frequency": "SOS", "route": "IV", "duration": "3 days", "instructions": "For severe pain only"}],
+                    [{"test_name": "LFT", "category": "Biochemistry"}, {"test_name": "CBC", "category": "Hematology"}, {"test_name": "KFT", "category": "Biochemistry"}],
+                    [{"exam_name": "USG Abdomen", "modality": "Ultrasound"}],
+                    "gastroenterology",
+                    "Daily reassessment. Repeat amylase in 48 hours.",
+                ),
+                (
+                    "Persistent cough and cold",
+                    "35-year-old female with productive cough, yellowish sputum for 10 days. Low-grade fever on and off. No hemoptysis, no chest pain. History of similar episodes 3 times in past year. Non-smoker.",
+                    "Temp 99.8°F, PR 84/min, BP 118/72, SpO2 97%. Bilateral rhonchi. No crepitations. Throat mildly congested.",
+                    "Recurrent lower respiratory tract infection. Rule out bronchiectasis / allergic bronchitis.",
+                    "Chest X-Ray PA ordered. Sputum culture. Tab Amoxicillin-Clavulanate 625mg TDS x 7 days. Tab Montelukast-Levocetirizine OD x 14 days. Steam inhalation advised. Review with reports.",
+                    [{"code": "J20.9", "description": "Acute bronchitis, unspecified"}],
+                    ["Acute bronchitis with recurrent episodes"],
+                    [{"name": "Amoxicillin-Clavulanate", "dosage": "625mg", "frequency": "TDS", "route": "Oral", "duration": "7 days", "instructions": "Take after food"}, {"name": "Montelukast-Levocetirizine", "dosage": "10mg+5mg", "frequency": "OD", "route": "Oral", "duration": "14 days", "instructions": "Take at bedtime"}],
+                    [{"test_name": "CBC", "category": "Hematology"}],
+                    [{"exam_name": "Chest X-Ray PA View", "modality": "XRay"}],
+                    "pulmonology",
+                    "Review in 1 week with X-Ray and sputum report",
+                ),
+                (
+                    "Joint pain in both knees",
+                    "62-year-old female with bilateral knee pain for 2 years, gradually worsening. Difficulty climbing stairs and squatting. Morning stiffness < 30 min. No trauma. BMI 32. Post-menopausal.",
+                    "BMI 32.1, BP 138/84. Bilateral knee crepitus. Varus deformity bilateral. ROM limited — flexion 110° bilaterally. No effusion. Tenderness over medial joint line.",
+                    "Bilateral knee osteoarthritis — Grade III (KL). Obesity.",
+                    "X-Ray Knee AP/Lateral bilateral ordered. Tab Etoricoxib 60mg OD x 14 days. Tab Diacerein 50mg BD. Cap Glucosamine-Chondroitin OD. Quadriceps strengthening exercises. Weight reduction counseling. Intra-articular injection if conservative management fails.",
+                    [{"code": "M17.0", "description": "Bilateral primary osteoarthritis of knee"}],
+                    ["Bilateral knee osteoarthritis"],
+                    [{"name": "Etoricoxib", "dosage": "60mg", "frequency": "OD", "route": "Oral", "duration": "14 days", "instructions": "Take after food"}, {"name": "Diacerein", "dosage": "50mg", "frequency": "BD", "route": "Oral", "duration": "3 months", "instructions": "Take after food"}, {"name": "Glucosamine-Chondroitin", "dosage": "500mg-400mg", "frequency": "OD", "route": "Oral", "duration": "3 months", "instructions": "Take after food"}],
+                    [],
+                    [{"exam_name": "X-Ray Knee AP/Lateral", "modality": "XRay"}],
+                    "orthopedics",
+                    "Review in 2 weeks with X-Ray. Physiotherapy follow-up.",
+                ),
+                (
+                    "Prenatal checkup",
+                    "28-year-old G2P1 at 28 weeks gestation. No complaints. Fetal movements well perceived. Previous delivery — LSCS 3 years ago for fetal distress. Current pregnancy uneventful so far. GDM screening done — normal.",
+                    "Weight 68kg (gain 8kg). BP 116/74. Fundal height 28cm. FHR 142/min regular. Cephalic presentation. No edema. Urine dipstick — protein negative, sugar negative.",
+                    "G2P1 at 28 weeks — normal progress. Previous LSCS — plan elective LSCS at 38 weeks.",
+                    "Hb, Blood sugar, TFT ordered. Iron + Calcium + Folic acid continued. USG at 32 weeks for growth scan. Kick count chart explained. Birth plan discussed — elective LSCS at 38 weeks. Review in 2 weeks.",
+                    [{"code": "Z34.28", "description": "Encounter for supervision of other normal pregnancy, 3rd trimester"}],
+                    ["Normal pregnancy — 28 weeks", "Previous cesarean section"],
+                    [{"name": "Ferrous Fumarate + Folic Acid", "dosage": "200mg+5mg", "frequency": "OD", "route": "Oral", "duration": "Until delivery", "instructions": "Take with orange juice"}, {"name": "Calcium Carbonate + Vit D3", "dosage": "500mg+250IU", "frequency": "BD", "route": "Oral", "duration": "Until delivery", "instructions": "Take after food"}],
+                    [{"test_name": "CBC", "category": "Hematology"}, {"test_name": "TFT", "category": "Biochemistry"}],
+                    [{"exam_name": "USG Obstetric", "modality": "Ultrasound"}],
+                    "obstetrics",
+                    "Review in 2 weeks. Growth scan at 32 weeks.",
+                ),
+                (
+                    "Child with recurrent wheeze",
+                    "6-year-old boy brought by mother with recurrent wheezing episodes — 4 in last 6 months. Currently mild cough and wheeze. Worse at night. History of allergic rhinitis. Family history — mother has asthma.",
+                    "Weight 20kg (50th centile). Temp 98.6°F, PR 100/min, RR 24/min, SpO2 96%. Bilateral expiratory wheeze. No chest retractions. Throat normal.",
+                    "Childhood asthma — mild persistent. Allergic rhinitis.",
+                    "Salbutamol MDI 200mcg SOS via spacer. Fluticasone MDI 100mcg BD via spacer (controller). Montelukast 4mg chewable HS. Avoid triggers — dust, smoke, cold air. Chest X-Ray if not done. Peak flow diary. Review in 1 month.",
+                    [{"code": "J45.30", "description": "Mild persistent asthma, uncomplicated"}],
+                    ["Childhood asthma — mild persistent", "Allergic rhinitis"],
+                    [{"name": "Salbutamol MDI", "dosage": "200mcg", "frequency": "SOS", "route": "Inhalation", "duration": "3 months", "instructions": "Use via spacer device"}, {"name": "Fluticasone MDI", "dosage": "100mcg", "frequency": "BD", "route": "Inhalation", "duration": "3 months", "instructions": "Use via spacer. Rinse mouth after"}, {"name": "Montelukast", "dosage": "4mg", "frequency": "HS", "route": "Oral", "duration": "3 months", "instructions": "Chewable tablet at bedtime"}],
+                    [],
+                    [{"exam_name": "Chest X-Ray PA View", "modality": "XRay"}],
+                    "pediatrics",
+                    "Review in 1 month. PFT when cooperative.",
+                ),
+                (
+                    "Severe headache and dizziness",
+                    "48-year-old male with sudden onset severe headache for 4 hours, worst headache of his life. Associated dizziness and nausea. No trauma. History of hypertension — irregular medications. No focal neurological deficit.",
+                    "BP 178/108, PR 88/min. GCS 15/15. Pupils equal and reactive. No neck rigidity. Power 5/5 all limbs. Plantar flexor bilateral. No papilledema on fundoscopy.",
+                    "Hypertensive urgency with severe headache. Rule out SAH / intracranial pathology.",
+                    "CT Brain plain — URGENT. CBC, KFT, electrolytes STAT. Inj Labetalol 20mg IV stat. Tab Amlodipine 10mg stat. Neuro observation chart. If CT normal — MRA brain. Admit for observation.",
+                    [{"code": "I10", "description": "Essential hypertension"}, {"code": "R51", "description": "Headache"}],
+                    ["Hypertensive urgency", "Severe headache — SAH ruled out"],
+                    [{"name": "Labetalol", "dosage": "20mg", "frequency": "Stat", "route": "IV", "duration": "Single dose", "instructions": "Slow IV over 2 minutes"}, {"name": "Amlodipine", "dosage": "10mg", "frequency": "OD", "route": "Oral", "duration": "1 month", "instructions": "Take in the morning"}],
+                    [{"test_name": "CBC", "category": "Hematology"}, {"test_name": "KFT", "category": "Biochemistry"}],
+                    [{"exam_name": "CT Brain Plain", "modality": "CT"}],
+                    "neurology",
+                    "Daily neuro assessment. Review CT report. BP monitoring Q4H.",
+                ),
+                (
+                    "Skin rash and itching",
+                    "22-year-old female with itchy, red, scaly patches on elbows and knees for 3 months. No response to OTC creams. Family history of psoriasis (father). No joint pain. No nail changes.",
+                    "Well-defined erythematous plaques with silvery scales on bilateral elbows, knees, and lower back. Auspitz sign positive. Nails — no pitting. Joints — no swelling or tenderness.",
+                    "Psoriasis vulgaris — mild to moderate (BSA ~8%).",
+                    "Topical Clobetasol 0.05% ointment BD x 2 weeks then taper. Calcipotriol ointment OD for maintenance. Emollients liberally. Coal tar shampoo for scalp. Phototherapy if no response. Review in 4 weeks.",
+                    [{"code": "L40.0", "description": "Psoriasis vulgaris"}],
+                    ["Psoriasis vulgaris"],
+                    [{"name": "Clobetasol propionate 0.05%", "dosage": "Apply thin layer", "frequency": "BD", "route": "Topical", "duration": "2 weeks", "instructions": "Apply to affected areas only"}, {"name": "Calcipotriol ointment", "dosage": "Apply thin layer", "frequency": "OD", "route": "Topical", "duration": "3 months", "instructions": "For maintenance after steroid taper"}],
+                    [],
+                    [],
+                    "dermatology",
+                    "Review in 4 weeks to assess response",
+                ),
+                (
+                    "Frequent urination and thirst",
+                    "45-year-old male presenting with polyuria, polydipsia, and weight loss of 5kg over 2 months. Family history — both parents diabetic. Sedentary lifestyle. Tingling in feet.",
+                    "BMI 31.2, BP 134/86. Acanthosis nigricans in neck folds. Fundoscopy — no retinopathy. Pedal pulses palpable. Monofilament — reduced sensation bilateral feet.",
+                    "New-onset Type 2 Diabetes Mellitus with peripheral neuropathy. Metabolic syndrome likely.",
+                    "FBS, PPBS, HbA1c, Lipid profile, KFT, Urine ACR, TFT ordered. Start Metformin 500mg BD (titrate to 1g BD). Tab Methylcobalamin 1500mcg OD for neuropathy. Diabetic diet plan. Exercise 30 min/day. DSME referral. Review in 2 weeks with reports.",
+                    [{"code": "E11.40", "description": "Type 2 DM with diabetic neuropathy"}, {"code": "E66.0", "description": "Obesity due to excess calories"}],
+                    ["Type 2 Diabetes Mellitus — newly diagnosed", "Diabetic peripheral neuropathy", "Obesity"],
+                    [{"name": "Metformin", "dosage": "500mg", "frequency": "BD", "route": "Oral", "duration": "1 month", "instructions": "Take after food. Titrate to 1g BD"}, {"name": "Methylcobalamin", "dosage": "1500mcg", "frequency": "OD", "route": "Oral", "duration": "3 months", "instructions": "Take after food"}],
+                    [{"test_name": "HbA1c", "category": "Biochemistry"}, {"test_name": "Lipid Profile", "category": "Biochemistry"}, {"test_name": "KFT", "category": "Biochemistry"}],
+                    [],
+                    "diabetology",
+                    "Review in 2 weeks with all reports. DSME session in 1 week.",
+                ),
+                (
+                    "Post knee replacement follow-up",
+                    "65-year-old male — 3 weeks post right TKR. Attending for wound check and physiotherapy progress. Pain well controlled with Tab Paracetamol. Walking with walker. ROM improving.",
+                    "Wound healed well. Sutures removed. No signs of infection. ROM — flexion 95°, full extension. Mild swelling. Power quadriceps 4/5.",
+                    "Post right TKR — satisfactory progress at 3 weeks.",
+                    "Continue physiotherapy — focus on ROM and strengthening. Tab Paracetamol 650mg SOS. DVT prophylaxis (Tab Rivaroxaban 10mg OD) for 2 more weeks. Ice application for swelling. Review in 6 weeks.",
+                    [{"code": "Z96.651", "description": "Presence of right artificial knee joint"}],
+                    ["Post right total knee replacement"],
+                    [{"name": "Paracetamol", "dosage": "650mg", "frequency": "SOS", "route": "Oral", "duration": "2 weeks", "instructions": "As needed for pain"}, {"name": "Rivaroxaban", "dosage": "10mg", "frequency": "OD", "route": "Oral", "duration": "2 weeks", "instructions": "DVT prophylaxis"}],
+                    [],
+                    [{"exam_name": "X-Ray Knee AP/Lateral", "modality": "XRay"}],
+                    "orthopedics",
+                    "Review in 6 weeks with X-Ray. Continue physiotherapy.",
+                ),
+                (
+                    "Ear pain and reduced hearing",
+                    "30-year-old female with left ear pain and reduced hearing for 5 days. History of URI 1 week ago. No ear discharge. No tinnitus or vertigo.",
+                    "Otoscopy — left TM bulging, hyperemic, mobility reduced. Right ear normal. Rinne negative left ear. Weber lateralized to left.",
+                    "Acute otitis media — left ear. Conductive hearing loss.",
+                    "Tab Amoxicillin 500mg TDS x 7 days. Tab Ibuprofen 400mg TDS x 5 days. Xylometazoline nasal drops x 5 days. Dry ear precautions. Review in 1 week. PTA if hearing doesn't improve.",
+                    [{"code": "H66.90", "description": "Otitis media, unspecified, unspecified ear"}],
+                    ["Acute otitis media — left"],
+                    [{"name": "Amoxicillin", "dosage": "500mg", "frequency": "TDS", "route": "Oral", "duration": "7 days", "instructions": "Take after food"}, {"name": "Ibuprofen", "dosage": "400mg", "frequency": "TDS", "route": "Oral", "duration": "5 days", "instructions": "Take after food"}],
+                    [],
+                    [],
+                    "ent",
+                    "Review in 1 week. PTA if persistent hearing loss.",
+                ),
+                (
+                    "Severe acidity and heartburn",
+                    "38-year-old male with burning epigastric pain and heartburn for 2 months. Worse after meals and at night. Associated regurgitation. Relieved partially by antacids. Spicy food intake. Stressful job. No alarm symptoms.",
+                    "BMI 27. Epigastric tenderness. No guarding. Bowel sounds normal. No organomegaly.",
+                    "GERD with possible peptic ulcer disease. No alarm features.",
+                    "Tab Pantoprazole 40mg BD x 4 weeks (before meals). Tab Domperidone 10mg TDS x 2 weeks. Lifestyle modification — avoid spicy food, late meals, smoking. Elevate head of bed. Review in 4 weeks. UGI endoscopy if no response.",
+                    [{"code": "K21.0", "description": "GERD with esophagitis"}],
+                    ["GERD"],
+                    [{"name": "Pantoprazole", "dosage": "40mg", "frequency": "BD", "route": "Oral", "duration": "4 weeks", "instructions": "Take 30 min before meals"}, {"name": "Domperidone", "dosage": "10mg", "frequency": "TDS", "route": "Oral", "duration": "2 weeks", "instructions": "Take 15 min before meals"}],
+                    [],
+                    [],
+                    "gastroenterology",
+                    "Review in 4 weeks. Endoscopy if symptoms persist.",
+                ),
+                (
+                    "Blood in urine",
+                    "52-year-old male with painless gross hematuria — 2 episodes in last 1 week. No dysuria, urgency or frequency. Smoker 15 pack-years. No fever, no flank pain. No history of renal stones.",
+                    "BP 140/88. Abdomen soft, non-tender. No palpable masses. No costovertebral angle tenderness. DRE — prostate mildly enlarged, smooth.",
+                    "Painless gross hematuria — Rule out bladder/renal malignancy. BPH likely contributing.",
+                    "Urine R/M, Urine culture, CBC, KFT, PSA ordered. USG KUB ordered. CT KUB if USG inconclusive. Cystoscopy planned. Urology referral. No NSAIDs. Hydration advised.",
+                    [{"code": "R31.0", "description": "Gross hematuria"}, {"code": "N40.0", "description": "BPH without LUTS"}],
+                    ["Gross hematuria — under evaluation", "BPH"],
+                    [],
+                    [{"test_name": "CBC", "category": "Hematology"}, {"test_name": "KFT", "category": "Biochemistry"}],
+                    [{"exam_name": "USG Abdomen", "modality": "Ultrasound"}, {"exam_name": "CT KUB", "modality": "CT"}],
+                    "urology",
+                    "Review with all reports in 1 week. Cystoscopy scheduling.",
+                ),
+                (
+                    "Palpitations and anxiety",
+                    "25-year-old female with episodes of palpitations, tremors, and anxiety for 1 month. Weight loss 3kg despite good appetite. Heat intolerance. Increased sweating. Irregular periods.",
+                    "Weight 52kg, PR 102/min regular, BP 128/76. Fine tremor of outstretched hands. Thyroid — diffusely enlarged, non-tender, no bruit. Eyes — mild lid retraction, no proptosis.",
+                    "Hyperthyroidism — likely Graves' disease.",
+                    "TFT (TSH, FT3, FT4), TSH receptor antibodies ordered. Tab Carbimazole 10mg TDS started. Tab Propranolol 20mg TDS for symptom control. Avoid iodine-rich food. Review in 3 weeks with reports. Endocrinology referral.",
+                    [{"code": "E05.00", "description": "Thyrotoxicosis with diffuse goiter"}],
+                    ["Hyperthyroidism — Graves' disease suspected"],
+                    [{"name": "Carbimazole", "dosage": "10mg", "frequency": "TDS", "route": "Oral", "duration": "Until review", "instructions": "Report sore throat or fever immediately"}, {"name": "Propranolol", "dosage": "20mg", "frequency": "TDS", "route": "Oral", "duration": "3 weeks", "instructions": "For symptom control"}],
+                    [{"test_name": "TFT", "category": "Biochemistry"}],
+                    [{"exam_name": "USG Neck / Thyroid", "modality": "Ultrasound"}],
+                    "endocrinology",
+                    "Review in 3 weeks with TFT results. Endo referral.",
+                ),
+                (
+                    "Post-appendectomy follow-up",
+                    "24-year-old male — 1 week post laparoscopic appendectomy for acute appendicitis. Wound healing well. No fever. Tolerating normal diet. Bowel movements regular.",
+                    "Afebrile. Port site wounds clean and dry. No signs of infection. Abdomen soft, non-tender. Bowel sounds normal.",
+                    "Post laparoscopic appendectomy — Day 7. Satisfactory recovery.",
+                    "Sutures can be removed at Day 10. Resume normal activities in 1 week. No heavy lifting for 4 weeks. Tab Paracetamol SOS for pain. Review only if concerns.",
+                    [{"code": "Z09", "description": "Encounter for follow-up after surgery"}],
+                    ["Post laparoscopic appendectomy — recovered"],
+                    [{"name": "Paracetamol", "dosage": "650mg", "frequency": "SOS", "route": "Oral", "duration": "5 days", "instructions": "Only if needed for pain"}],
+                    [],
+                    [],
+                    "surgery",
+                    "Suture removal at Day 10. No routine follow-up needed.",
+                ),
+                (
+                    "Eye redness and watering",
+                    "40-year-old female with bilateral eye redness, watering, and foreign body sensation for 3 days. Itching present. Uses computer for 8-10 hours/day. Wears contact lenses.",
+                    "VA 6/6 both eyes. Conjunctival injection bilateral. No corneal staining on fluorescein. Pupils normal. Schirmer test — 8mm (borderline low).",
+                    "Allergic conjunctivitis with dry eye syndrome. Computer vision syndrome contributing.",
+                    "Olopatadine eye drops 0.1% BD x 2 weeks. CMC eye drops (lubricant) QID x 1 month. Discontinue contact lens for 2 weeks. 20-20-20 rule for computer use. Warm compress BD. Review in 2 weeks.",
+                    [{"code": "H10.10", "description": "Acute atopic conjunctivitis"}, {"code": "H04.12", "description": "Dry eye syndrome"}],
+                    ["Allergic conjunctivitis", "Dry eye syndrome"],
+                    [{"name": "Olopatadine 0.1%", "dosage": "1 drop each eye", "frequency": "BD", "route": "Topical", "duration": "2 weeks", "instructions": "Anti-allergy eye drops"}, {"name": "CMC Lubricant drops", "dosage": "1 drop each eye", "frequency": "QID", "route": "Topical", "duration": "1 month", "instructions": "Preservative-free preferred"}],
+                    [],
+                    [],
+                    "ophthalmology",
+                    "Review in 2 weeks. Consider referral if persistent.",
+                ),
+                (
+                    "Chronic fatigue and weight loss",
+                    "50-year-old male with fatigue, unintentional weight loss (8kg in 3 months), night sweats, and low-grade fever. Smoker 25 pack-years. No cough or hemoptysis. Appetite decreased.",
+                    "Cachexic appearance. Weight 58kg, BMI 20.1. Temp 99.6°F. Left supraclavicular lymph node 2x2cm firm, non-tender. Chest — reduced air entry left base. Abdomen — hepatomegaly 3cm below costal margin.",
+                    "Weight loss with lymphadenopathy and hepatomegaly — Malignancy / TB / Lymphoma to be ruled out. URGENT workup.",
+                    "STAT: CBC, ESR, CRP, LFT, LDH, Chest X-Ray. HRCT Chest. USG Abdomen. FNAC supraclavicular lymph node. AFP, CEA tumor markers. Pulmonology and Oncology referral URGENT.",
+                    [{"code": "R63.4", "description": "Abnormal weight loss"}, {"code": "R59.1", "description": "Generalized enlarged lymph nodes"}],
+                    ["Unintentional weight loss — under evaluation", "Lymphadenopathy — under evaluation"],
+                    [],
+                    [{"test_name": "CBC", "category": "Hematology"}, {"test_name": "LFT", "category": "Biochemistry"}],
+                    [{"exam_name": "Chest X-Ray PA View", "modality": "XRay"}, {"exam_name": "HRCT Chest", "modality": "CT"}, {"exam_name": "USG Abdomen", "modality": "Ultrasound"}],
+                    "general",
+                    "URGENT: Oncology referral. Review with FNAC and imaging in 3 days.",
+                ),
+            ]
+
+            encounter_objs = []
+            enc_patients = patients[:30]  # use first 30 patients
+            for enc_idx in range(30):
+                pat = enc_patients[enc_idx]
+                doc = all_doctors[enc_idx % len(all_doctors)]
+                template = encounter_templates[enc_idx % len(encounter_templates)]
+                complaint, subj, obj, assess, plan, icd, diags, meds, labs_json, rads_json, tmpl, fu_text = template
+
+                days_ago = random.randint(0, 7)
+                hours_ago = random.randint(0, 12)
+                enc_status = EncounterStatus.Signed if days_ago > 0 else random.choice([EncounterStatus.Draft, EncounterStatus.Signed])
+                is_critical = random.random() < 0.2
+
+                encounter = Encounter(
+                    patient_id=pat.id,
+                    doctor_id=doc.id,
+                    appointment_id=None,
+                    admission_id=active_admissions[enc_idx][0].id if enc_idx < len(active_admissions) else None,
+                    encounter_date=NOW - timedelta(days=days_ago, hours=hours_ago),
+                    status=enc_status,
+                    subjective=subj,
+                    objective=obj,
+                    assessment=assess,
+                    plan=plan,
+                    vitals=_vitals(critical=is_critical),
+                    icd_codes=icd,
+                    diagnoses=diags,
+                    medications=meds,
+                    lab_orders=labs_json,
+                    radiology_orders=rads_json,
+                    follow_up=fu_text,
+                    ai_alerts=["Consider checking drug interactions for prescribed medications"] if random.random() < 0.3 else [],
+                    ai_differentials=[f"Consider ruling out: {random.choice(['malignancy', 'autoimmune', 'infectious', 'metabolic'])} etiology"] if random.random() < 0.4 else [],
+                    ai_recommendations=[],
+                    news2_score=round(random.uniform(0, 3.0 if not is_critical else 8.0), 1),
+                    template_used=tmpl,
+                    version=1,
+                )
+                db.add(encounter)
+                encounter_objs.append(encounter)
+            await db.flush()
+
+            # ==================================================================
+            # 16. RADIOLOGY ORDERS (20) + REPORTS for completed ones
+            # ==================================================================
+            rad_findings_pool = {
+                "XRay": [
+                    ("No active lung parenchymal lesion. Heart size normal. Costophrenic angles clear.", "Normal chest X-ray study.", None),
+                    ("Bilateral perihilar haziness with increased bronchovascular markings. No pleural effusion.", "Findings suggestive of acute bronchitis / early pneumonitis. Correlate clinically.", "AI detected: Increased peribronchial cuffing pattern - 87% confidence for lower respiratory tract infection."),
+                    ("Joint space narrowing in medial compartment. Subchondral sclerosis. Marginal osteophytes.", "Osteoarthritis changes — KL Grade III.", "AI measured joint space: 2.1mm (reduced). Osteophyte score: moderate."),
+                    ("Reduced disc height at L4-L5. Osteophyte formation. No listhesis.", "Degenerative disc disease L4-L5. No instability.", None),
+                    ("No fracture or dislocation. Soft tissues normal.", "Normal study — no bony abnormality.", None),
+                ],
+                "CT": [
+                    ("No intra-axial or extra-axial hemorrhage. No mass lesion. Ventricles normal. No midline shift.", "Normal CT brain study. No acute intracranial pathology.", "AI analysis: No hemorrhage detected (99.2% confidence). Midline structures symmetric."),
+                    ("Bilateral ground glass opacities with interlobular septal thickening. No consolidation. No pleural effusion.", "HRCT findings suggestive of interstitial lung disease. Recommend PFT and rheumatology workup.", "AI quantified: GGO involves 18% of total lung volume. Pattern: NSIP-like distribution."),
+                    ("Bulky pancreas with peripancreatic fat stranding. No necrosis. Mild free fluid in Morrison's pouch.", "Acute interstitial pancreatitis (CT severity index 4/10). No complications.", "AI severity assessment: Modified CTSI score 4. Balthazar Grade C. Low risk of adverse outcome."),
+                    ("5mm calculus in lower pole of left kidney. Mild left hydroureteronephrosis. Right kidney normal.", "Left renal calculus with mild hydronephrosis.", "AI detected: Calculus 5.2mm at L3 level. Hounsfield units: 890 (calcium oxalate likely). Ureteral diameter: 4mm."),
+                ],
+                "MRI": [
+                    ("Posterior disc protrusion at L4-L5 indenting the thecal sac with left lateral extension causing left L5 nerve root compression. No spinal stenosis.", "L4-L5 disc prolapse with left L5 radiculopathy.", "AI measurement: Disc protrusion 6.2mm posterior. Neural foraminal narrowing: moderate (left). Spinal canal AP diameter: 12mm (adequate)."),
+                    ("No acute infarct on DWI. No mass lesion. Age-appropriate white matter changes.", "Normal MRI brain. No acute pathology.", None),
+                ],
+                "Ultrasound": [
+                    ("Liver normal in size and echotexture. GB — no calculi. CBD normal. Pancreas normal. Spleen normal. Both kidneys normal. No free fluid.", "Normal abdominal ultrasound.", None),
+                    ("Single live intrauterine fetus in cephalic presentation. BPD/HC/AC/FL correspond to ~28 weeks. AFI 12cm. Placenta posterior, Grade II. Cervical length 3.5cm.", "Normal obstetric scan at 28 weeks. Growth on 50th centile.", "AI biometry: EFW 1150g (52nd centile). CPR normal. No IUGR markers."),
+                    ("Thyroid — both lobes mildly enlarged. Right lobe: 2.1x1.8cm hypoechoic nodule with peripheral vascularity (TI-RADS 3). Left lobe homogeneous.", "Right thyroid nodule — TI-RADS 3. Recommend follow-up in 6 months.", "AI TI-RADS classification: Score 3 (mildly suspicious). Composition: solid. Echogenicity: hypoechoic. Margins: smooth. No calcifications."),
+                    ("LV function normal. LVEF 62%. No RWMA. Valves normal. No pericardial effusion. Diastolic function — Grade I impairment.", "Normal LV systolic function. Mild diastolic dysfunction Grade I (age-related).", None),
+                ],
+            }
+
+            rad_patients = patients[:20]
+            rad_order_objs = []
+            for ro_idx in range(20):
+                pat = rad_patients[ro_idx]
+                doc = random.choice(all_doctors)
+                exam = rad_exam_objs[ro_idx % len(rad_exam_objs)]
+                is_completed = ro_idx < 14  # 14 completed, 6 pending
+                status = RadOrderStatus.Completed if is_completed else random.choice([RadOrderStatus.Ordered, RadOrderStatus.Scheduled])
+
+                ro = RadiologyOrder(
+                    patient_id=pat.id,
+                    doctor_id=doc.id,
+                    exam_id=exam.id,
+                    clinical_indication=encounter_templates[ro_idx % len(encounter_templates)][2][:200],  # objective section
+                    priority=random.choice(["Routine", "Urgent", "STAT"]),
+                    status=status,
+                    scheduled_datetime=NOW - timedelta(hours=random.randint(2, 96)) if is_completed else NOW + timedelta(hours=random.randint(1, 48)),
+                )
+                db.add(ro)
+                rad_order_objs.append((ro, exam, is_completed))
+            await db.flush()
+
+            # --- Radiology Reports for completed orders ---
+            for ro, exam, is_completed in rad_order_objs:
+                if not is_completed:
+                    continue
+                modality_key = exam.modality.value
+                findings_pool = rad_findings_pool.get(modality_key, rad_findings_pool["XRay"])
+                findings_text, impression_text, ai_text = random.choice(findings_pool)
+
+                report = RadiologyReport(
+                    order_id=ro.id,
+                    radiologist_id=random.choice(all_doctors).id,
+                    findings=findings_text,
+                    impression=impression_text,
+                    images=[
+                        {"url": f"/radiology/images/{ro.id}/series1/img{i}.dcm", "series": f"Series {i}", "description": f"{exam.name} - Image {i}"}
+                        for i in range(1, random.randint(2, 6))
+                    ],
+                    ai_findings=ai_text,
+                )
+                db.add(report)
+            await db.flush()
+
+            # ==================================================================
+            # 17. PROBLEM LIST ENTRIES (60) — Active + Resolved for 25 patients
+            # ==================================================================
+            problem_data = [
+                # (icd_code, description, category, severity, status, onset_days_ago, resolved_days_ago_or_None, notes)
+                ("E11.65", "Type 2 Diabetes Mellitus", "Endocrine", "Moderate", "Active", 1825, None, "On Metformin + Glimepiride. HbA1c 8.2% — needs optimization."),
+                ("I10", "Essential Hypertension", "Cardiovascular", "Moderate", "Active", 2190, None, "On Amlodipine 10mg. Target BP <130/80."),
+                ("E78.5", "Hyperlipidemia", "Metabolic", "Mild", "Active", 730, None, "On Atorvastatin 40mg HS. LDL target <100."),
+                ("M17.0", "Bilateral Knee Osteoarthritis", "Musculoskeletal", "Moderate", "Active", 730, None, "KL Grade III. Physiotherapy ongoing."),
+                ("J45.30", "Mild Persistent Asthma", "Respiratory", "Mild", "Active", 365, None, "On Fluticasone + Salbutamol PRN. Well controlled."),
+                ("K21.0", "GERD", "GI", "Mild", "Active", 180, None, "On Pantoprazole 40mg. Lifestyle modification advised."),
+                ("G43.909", "Migraine", "Neurological", "Moderate", "Active", 1095, None, "Episodic. Trigger: stress, sleep deprivation."),
+                ("L40.0", "Psoriasis Vulgaris", "Dermatology", "Mild", "Active", 365, None, "BSA 8%. On topical Clobetasol + Calcipotriol."),
+                ("H04.12", "Dry Eye Syndrome", "Ophthalmology", "Mild", "Active", 180, None, "On CMC lubricant drops QID."),
+                ("E05.00", "Graves' Disease", "Endocrine", "Moderate", "Active", 60, None, "On Carbimazole 10mg TDS. Awaiting TFT results."),
+                ("N40.0", "Benign Prostatic Hyperplasia", "Urology", "Mild", "Active", 365, None, "Watchful waiting. PSA monitoring."),
+                ("F41.1", "Generalized Anxiety Disorder", "Psychiatry", "Mild", "Active", 540, None, "On CBT. Consider SSRI if worsening."),
+                ("M54.4", "Lumbar Radiculopathy", "Musculoskeletal", "Moderate", "Active", 180, None, "L4-L5 disc prolapse. MRI confirmed."),
+                ("E11.40", "Diabetic Peripheral Neuropathy", "Neurology", "Moderate", "Active", 90, None, "On Pregabalin 75mg BD. Sensation improving."),
+                ("I20.9", "Stable Angina Pectoris", "Cardiovascular", "Moderate", "Active", 14, None, "On Aspirin + Atorvastatin. Stress test pending."),
+                # Resolved problems
+                ("A91", "Dengue Fever", "Infectious", "Severe", "Resolved", 90, 80, "Managed conservatively. Platelets normalized."),
+                ("K35.80", "Acute Appendicitis", "GI/Surgical", "Severe", "Resolved", 14, 7, "Laparoscopic appendectomy done. Recovered well."),
+                ("J18.9", "Community Acquired Pneumonia", "Respiratory", "Moderate", "Resolved", 60, 50, "Completed 7 days antibiotics. Chest clear."),
+                ("K85.9", "Acute Pancreatitis", "GI", "Severe", "Resolved", 30, 20, "Alcohol-induced. Resolved with conservative management."),
+                ("S72.001A", "Fracture Neck of Femur", "Orthopedic", "Critical", "Resolved", 120, 60, "ORIF done. Mobilizing with walker."),
+                ("B34.9", "Viral Upper Respiratory Infection", "Infectious", "Mild", "Resolved", 45, 40, "Self-limiting. Resolved with symptomatic treatment."),
+                ("N10", "Acute Pyelonephritis", "Urology", "Moderate", "Resolved", 75, 60, "IV antibiotics x 5 days then oral x 7 days. Urine culture negative on follow-up."),
+                ("R50.9", "Fever of Unknown Origin", "General", "Moderate", "Resolved", 30, 22, "Workup negative. Self-resolved. Likely viral."),
+                ("O14.1", "Severe Pre-eclampsia", "Obstetrics", "Critical", "Resolved", 180, 170, "Managed with MgSO4. Emergency LSCS at 34 weeks. Mother and baby well."),
+                ("J06.9", "Acute Upper Respiratory Infection", "Respiratory", "Mild", "Resolved", 20, 15, "Symptomatic treatment. Resolved."),
+            ]
+
+            problem_objs = []
+            problem_patients = patients[:25]
+            for prob_idx, (icd, desc, cat, sev, stat, onset_ago, resolved_ago, notes) in enumerate(problem_data):
+                pat = problem_patients[prob_idx % 25]
+                doc = all_doctors[prob_idx % len(all_doctors)]
+                enc = encounter_objs[prob_idx % len(encounter_objs)] if prob_idx < len(encounter_objs) else None
+
+                entry = ProblemListEntry(
+                    patient_id=pat.id,
+                    recorded_by=doc.id,
+                    encounter_id=enc.id if enc else None,
+                    icd_code=icd,
+                    description=desc,
+                    category=cat,
+                    status=ProblemStatus(stat),
+                    severity=ProblemSeverity(sev),
+                    onset_date=TODAY - timedelta(days=onset_ago),
+                    resolved_date=(TODAY - timedelta(days=resolved_ago)) if resolved_ago else None,
+                    notes=notes,
+                    resolution_notes=f"Resolved after treatment. Follow-up as needed." if resolved_ago else None,
+                    history=[{
+                        "status": stat,
+                        "changed_by": str(doc.id),
+                        "changed_at": (NOW - timedelta(days=onset_ago)).isoformat(),
+                        "notes": f"Initially recorded as {stat}"
+                    }],
+                )
+                db.add(entry)
+                problem_objs.append(entry)
+
+            # Give some patients multiple problems for realistic demo
+            multi_problem_patients = patients[:10]
+            extra_problems = [
+                ("E11.65", "Type 2 Diabetes Mellitus", "Endocrine", "Moderate", "Active", 1500, None, "Poorly controlled. HbA1c 9.1%."),
+                ("I10", "Essential Hypertension", "Cardiovascular", "Mild", "Active", 1200, None, "On Telmisartan 40mg. Well controlled."),
+                ("E66.0", "Obesity", "Metabolic", "Moderate", "Active", 3650, None, "BMI 32. Diet and exercise counseled."),
+                ("F32.1", "Major Depressive Disorder", "Psychiatry", "Moderate", "Active", 365, None, "On Escitalopram 10mg. Improving."),
+                ("J44.1", "COPD with Acute Exacerbation", "Respiratory", "Severe", "Active", 30, None, "Ex-smoker. On Tiotropium + Formoterol."),
+                ("M81.0", "Osteoporosis", "Musculoskeletal", "Moderate", "Active", 730, None, "Post-menopausal. On Calcium + Vit D3."),
+                ("I48.91", "Atrial Fibrillation", "Cardiovascular", "Moderate", "Active", 90, None, "On Apixaban. Rate controlled with Metoprolol."),
+                ("G47.33", "Obstructive Sleep Apnea", "Respiratory", "Moderate", "Active", 180, None, "AHI 22. CPAP initiated."),
+                ("K76.0", "Fatty Liver Disease", "GI", "Mild", "Active", 365, None, "NAFLD. Lifestyle modification."),
+                ("D50.9", "Iron Deficiency Anemia", "Hematology", "Mild", "Resolved", 90, 30, "Hb normalized after 3 months iron supplementation."),
+            ]
+            for idx, (icd, desc, cat, sev, stat, onset_ago, resolved_ago, notes) in enumerate(extra_problems):
+                pat = multi_problem_patients[idx]
+                doc = random.choice(all_doctors)
+                entry = ProblemListEntry(
+                    patient_id=pat.id,
+                    recorded_by=doc.id,
+                    icd_code=icd,
+                    description=desc,
+                    category=cat,
+                    status=ProblemStatus(stat),
+                    severity=ProblemSeverity(sev),
+                    onset_date=TODAY - timedelta(days=onset_ago),
+                    resolved_date=(TODAY - timedelta(days=resolved_ago)) if resolved_ago else None,
+                    notes=notes,
+                    resolution_notes=f"Condition resolved with treatment." if resolved_ago else None,
+                    history=[{
+                        "status": stat,
+                        "changed_by": str(doc.id),
+                        "changed_at": (NOW - timedelta(days=onset_ago)).isoformat(),
+                        "notes": f"Added to problem list"
+                    }],
+                )
+                db.add(entry)
+            await db.flush()
+
+            # ==================================================================
+            # 18. FOLLOW-UP SCHEDULES (25) — Mix of upcoming, overdue, completed
+            # ==================================================================
+            follow_up_data = [
+                # (days_from_now, time_str, reason, instructions, priority, status, review_items)
+                (3, "10:00", "Review lab reports — CBC, HbA1c", "Bring fasting blood sugar report", "Routine", "Scheduled",
+                 [{"type": "lab", "description": "Check HbA1c result"}, {"type": "lab", "description": "Review CBC for anemia"}]),
+                (7, "11:00", "Post-appendectomy wound check", "Remove sutures if healed", "Routine", "Scheduled",
+                 [{"type": "symptoms", "description": "Check wound healing"}, {"type": "symptoms", "description": "Assess pain level"}]),
+                (14, "09:30", "Diabetes management review", "Bring glucose diary and all reports", "Routine", "Scheduled",
+                 [{"type": "lab", "description": "Review HbA1c trend"}, {"type": "medication", "description": "Assess Empagliflozin response"}, {"type": "vitals", "description": "Check BP and weight"}]),
+                (1, "14:00", "Hypertensive urgency follow-up", "Bring BP diary. Fasting required.", "Urgent", "Scheduled",
+                 [{"type": "vitals", "description": "Blood pressure monitoring"}, {"type": "imaging", "description": "Review CT Brain report"}]),
+                (21, "10:30", "Knee osteoarthritis — physiotherapy progress", "Bring physiotherapy progress notes", "Routine", "Scheduled",
+                 [{"type": "imaging", "description": "Review X-Ray knee"}, {"type": "symptoms", "description": "Assess ROM improvement"}]),
+                (2, "15:00", "Chest X-Ray report review", "Bring X-Ray films", "Urgent", "Confirmed",
+                 [{"type": "imaging", "description": "Review Chest X-Ray"}, {"type": "lab", "description": "Sputum culture result"}]),
+                (30, "10:00", "Asthma control assessment", "Bring peak flow diary", "Routine", "Scheduled",
+                 [{"type": "symptoms", "description": "Assess symptom frequency"}, {"type": "medication", "description": "Review inhaler technique"}]),
+                (42, "11:00", "Post TKR 6-week follow-up", "Bring X-Ray knee", "Routine", "Scheduled",
+                 [{"type": "imaging", "description": "Post-op X-Ray review"}, {"type": "symptoms", "description": "ROM and gait assessment"}]),
+                (7, "09:00", "Oncology referral follow-up", "Bring all reports and FNAC result", "Critical", "Scheduled",
+                 [{"type": "lab", "description": "FNAC report"}, {"type": "imaging", "description": "CT and USG reports"}, {"type": "other", "description": "Oncology referral status"}]),
+                (14, "16:00", "Obstetric 30-week checkup", "Fasting not required. Bring previous scan reports.", "Routine", "Scheduled",
+                 [{"type": "imaging", "description": "Growth scan at 32 weeks"}, {"type": "vitals", "description": "BP and weight monitoring"}, {"type": "lab", "description": "Hb check"}]),
+                # Overdue follow-ups
+                (-3, "10:00", "Thyroid function review", "Was supposed to review TFT results", "Urgent", "Scheduled",
+                 [{"type": "lab", "description": "TFT results review"}]),
+                (-5, "11:00", "Lipid profile follow-up", "Missed appointment", "Routine", "Scheduled",
+                 [{"type": "lab", "description": "Lipid profile review"}]),
+                (-1, "09:00", "BP monitoring follow-up", "Patient did not attend", "Urgent", "Scheduled",
+                 [{"type": "vitals", "description": "24-hour ABPM review"}]),
+                # Completed follow-ups
+                (-7, "10:30", "Post-pneumonia review", "Completed — patient recovered well", "Routine", "Completed",
+                 [{"type": "imaging", "description": "Repeat CXR — cleared"}, {"type": "symptoms", "description": "No cough, fever resolved"}]),
+                (-14, "14:00", "Dengue recovery follow-up", "Platelet count normalized", "Urgent", "Completed",
+                 [{"type": "lab", "description": "CBC — platelets normal"}, {"type": "symptoms", "description": "Fully recovered"}]),
+                (-10, "09:00", "Surgical wound review", "Wound healed. Sutures removed.", "Routine", "Completed",
+                 [{"type": "symptoms", "description": "Wound assessment — healed well"}]),
+                (-21, "11:00", "Diabetes quarterly review", "HbA1c improved to 7.4%", "Routine", "Completed",
+                 [{"type": "lab", "description": "HbA1c — improved from 8.2 to 7.4"}, {"type": "medication", "description": "Continue current regimen"}]),
+                (-30, "10:00", "Asthma step-down assessment", "Well controlled. Step down considered.", "Routine", "Completed",
+                 [{"type": "symptoms", "description": "No exacerbations in 3 months"}, {"type": "medication", "description": "Step down from moderate to low dose ICS"}]),
+                # Cancelled / Rescheduled
+                (10, "10:00", "Dermatology follow-up — Psoriasis", "Rescheduled from last week", "Routine", "Rescheduled",
+                 [{"type": "symptoms", "description": "Assess response to topical therapy"}]),
+                (-2, "15:00", "Eye check-up", "Patient cancelled — will reschedule", "Routine", "Cancelled",
+                 [{"type": "symptoms", "description": "Dry eye reassessment"}]),
+                # More upcoming
+                (5, "10:00", "Pancreatitis recovery check", "Bring LFT and amylase reports", "Urgent", "Scheduled",
+                 [{"type": "lab", "description": "Serum amylase/lipase"}, {"type": "imaging", "description": "Follow-up USG abdomen if needed"}]),
+                (60, "11:00", "Annual health checkup — DM patient", "Fasting required. Full body checkup.", "Routine", "Scheduled",
+                 [{"type": "lab", "description": "HbA1c, KFT, LFT, Lipids, TFT, Urine ACR"}, {"type": "imaging", "description": "ECG"}, {"type": "other", "description": "Ophthalmology referral for retina screening"}]),
+                (90, "09:00", "Thyroid follow-up — Graves' disease", "Repeat TFT and TSH receptor Ab", "Routine", "Scheduled",
+                 [{"type": "lab", "description": "TFT and TRAb levels"}, {"type": "imaging", "description": "Thyroid USG follow-up"}]),
+                (7, "14:30", "Hematuria workup follow-up", "Bring USG and CT KUB reports", "Urgent", "Scheduled",
+                 [{"type": "imaging", "description": "USG KUB report"}, {"type": "lab", "description": "Urine cytology"}, {"type": "other", "description": "Cystoscopy scheduling"}]),
+                (4, "10:00", "GERD treatment response", "Bring food diary", "Routine", "Confirmed",
+                 [{"type": "symptoms", "description": "Assess heartburn frequency"}, {"type": "medication", "description": "PPI step-down if improved"}]),
+            ]
+
+            fu_patients = patients[:25]
+            for fu_idx, (days_offset, time_str, reason, instructions, prio, stat, review) in enumerate(follow_up_data):
+                pat = fu_patients[fu_idx % 25]
+                doc = all_doctors[fu_idx % len(all_doctors)]
+                enc = encounter_objs[fu_idx % len(encounter_objs)] if fu_idx < len(encounter_objs) else None
+                h, m = map(int, time_str.split(":"))
+
+                fu = FollowUp(
+                    patient_id=pat.id,
+                    doctor_id=doc.id,
+                    encounter_id=enc.id if enc else None,
+                    scheduled_date=TODAY + timedelta(days=days_offset),
+                    scheduled_time=time(h, m),
+                    duration_minutes=random.choice([15, 20, 30]),
+                    reason=reason,
+                    instructions=instructions,
+                    priority=FollowUpPriority(prio),
+                    status=FollowUpStatus(stat),
+                    review_items=review,
+                    reminder_days_before=1 if prio == "Routine" else 2,
+                    reminder_sent=NOW - timedelta(days=1) if days_offset <= 1 and stat == "Scheduled" else None,
+                    completion_notes=instructions if stat == "Completed" else None,
+                )
+                db.add(fu)
+            await db.flush()
+
+            # ==================================================================
             # COMMIT
             # ==================================================================
             await db.commit()
+
+            num_encounters = len(encounter_objs)
+            num_rad_exams = len(rad_exam_objs)
+            num_rad_orders = len(rad_order_objs)
+            num_problems = len(problem_data) + len(extra_problems)
 
             print("=" * 60)
             print("  DATABASE SEEDED SUCCESSFULLY!")
@@ -1153,6 +1784,11 @@ async def seed():
             print(f"  Lab Orders:           15")
             print(f"  Lab Tests:            13")
             print(f"  OT Rooms:             6")
+            print(f"  Encounters (SOAP):    {num_encounters}")
+            print(f"  Radiology Exams:      {num_rad_exams}")
+            print(f"  Radiology Orders:     {num_rad_orders} (14 with reports)")
+            print(f"  Problem List Entries:  {num_problems}")
+            print(f"  Follow-up Schedules:  {len(follow_up_data)}")
             print()
             print("  Login Credentials:")
             print("  Admin:   admin@health1erp.com / Admin@123")
