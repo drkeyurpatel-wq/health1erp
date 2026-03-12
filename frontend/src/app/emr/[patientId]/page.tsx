@@ -132,6 +132,9 @@ export default function EMREncounterPage() {
   const [currentEncounterId, setCurrentEncounterId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
+  // ── Allergy alerts ──
+  const [allergyConflicts, setAllergyConflicts] = useState<any[]>([]);
+
   // ── UI State ──
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
@@ -272,6 +275,37 @@ export default function EMREncounterPage() {
     }
   }, [patient, patientId, subjective, vitals, medOrders, selectedIcds, toast]);
 
+  // ── Check Allergy Conflicts ──
+  const checkAllergies = useCallback(async (meds: any[]) => {
+    if (!patientId || meds.length === 0) return;
+    try {
+      const { data } = await api.post("/encounters/check-allergies", {
+        patient_id: patientId,
+        medications: meds.map(m => m.name),
+      });
+      if (data.has_conflicts) {
+        setAllergyConflicts(data.conflicts);
+        for (const conflict of data.conflicts) {
+          toast("error", "ALLERGY ALERT", conflict.message);
+        }
+      } else {
+        setAllergyConflicts([]);
+      }
+    } catch {
+      // Non-critical — don't block workflow
+    }
+  }, [patientId, toast]);
+
+  // ── Auto-check allergies when meds change ──
+  useEffect(() => {
+    if (medOrders.length > 0 && patient?.allergies?.length) {
+      const timer = setTimeout(() => checkAllergies(medOrders), 500);
+      return () => clearTimeout(timer);
+    } else {
+      setAllergyConflicts([]);
+    }
+  }, [medOrders, patient, checkAllergies]);
+
   // ── Check Drug Interactions ──
   const checkInteractions = useCallback(async () => {
     if (medOrders.length < 2) {
@@ -383,6 +417,11 @@ export default function EMREncounterPage() {
         radiology_orders: radOrders.map(r => ({ exam_name: r.exam_name, modality: r.modality || "" })),
         follow_up: followUp,
         sign: lock,
+        // Persist AI/CDSS data with the encounter
+        news2_score: news2Score?.total_score ?? null,
+        ai_alerts: alerts.length > 0 ? alerts : null,
+        ai_differentials: differentials.length > 0 ? differentials : null,
+        ai_recommendations: recommendations.length > 0 ? recommendations : null,
       };
 
       // Save to encounters API
@@ -428,7 +467,7 @@ export default function EMREncounterPage() {
     } finally {
       setSaving(false);
     }
-  }, [patient, patientId, currentEncounterId, activeAdmission, subjective, objective, assessment, plan, vitals, selectedIcds, medOrders, labOrders, radOrders, followUp, toast]);
+  }, [patient, patientId, currentEncounterId, activeAdmission, subjective, objective, assessment, plan, vitals, selectedIcds, medOrders, labOrders, radOrders, followUp, news2Score, alerts, differentials, recommendations, toast]);
 
   // ── Download prescription PDF ──
   const downloadPrescription = useCallback(async () => {
@@ -551,6 +590,31 @@ export default function EMREncounterPage() {
           alertCount={alerts.filter(a => a.severity === "critical" || a.severity === "high").length}
         />
       </div>
+
+      {/* ── Allergy Conflict Banner ──────────────────────────── */}
+      {allergyConflicts.length > 0 && (
+        <div className="mb-4 bg-red-50 border-2 border-red-300 rounded-2xl p-4 animate-pulse">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-8 w-8 rounded-full bg-red-500 flex items-center justify-center">
+              <span className="text-white text-lg font-bold">!</span>
+            </div>
+            <h3 className="text-sm font-bold text-red-800">ALLERGY CONFLICT DETECTED</h3>
+            <Badge variant="destructive">{allergyConflicts.length} conflict{allergyConflicts.length > 1 ? "s" : ""}</Badge>
+          </div>
+          <div className="space-y-1.5 ml-10">
+            {allergyConflicts.map((c, i) => (
+              <div key={i} className="text-xs text-red-700">
+                <span className="font-bold">{c.medication}</span>
+                {" — "}
+                {c.match_type === "direct" ? "Direct allergy match" : `Cross-reactivity (${c.drug_class})`}
+                {" with known allergy to "}
+                <span className="font-bold">{c.allergy}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-red-500 mt-2 ml-10">Remove conflicting medications or document clinical override before signing.</p>
+        </div>
+      )}
 
       {/* ── Encounter History Panel (collapsible) ────────────────── */}
       {showHistory && (
