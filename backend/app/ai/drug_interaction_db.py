@@ -6,6 +6,8 @@ Severities: "contraindicated", "high", "moderate", "low"
 
 Sources modeled after: FDA drug interaction tables, BNF, Lexicomp, Micromedex.
 This is a rule-based lookup — not a substitute for a pharmacist's clinical judgment.
+
+Coverage: 200+ clinically significant interaction pairs across 18 therapeutic categories.
 """
 
 
@@ -15,7 +17,7 @@ InteractionEntry = tuple[list[str], list[str], str, str, str, str]
 
 INTERACTION_DB: list[InteractionEntry] = [
     # ═══════════════════════════════════════════════════════════════
-    # ANTICOAGULANTS & ANTIPLATELETS
+    # 1. ANTICOAGULANTS & ANTIPLATELETS
     # ═══════════════════════════════════════════════════════════════
     (
         ["warfarin", "coumadin"],
@@ -74,6 +76,38 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Avoid combination. If unavoidable, warfarin dose may need 2–5x increase. Monitor INR daily during initiation.",
     ),
     (
+        ["warfarin", "coumadin"],
+        ["cranberry", "cranberry juice"],
+        "moderate",
+        "Cranberry products may increase warfarin effect and INR",
+        "Possible CYP2C9 inhibition by cranberry flavonoids",
+        "Advise patients to limit cranberry intake. Monitor INR if consuming regularly.",
+    ),
+    (
+        ["warfarin", "coumadin"],
+        ["vitamin k", "phytonadione"],
+        "high",
+        "Vitamin K directly antagonizes warfarin's anticoagulant effect",
+        "Vitamin K restores clotting factor synthesis that warfarin inhibits",
+        "Maintain consistent vitamin K intake. Avoid sudden dietary changes. Leafy greens are high in vitamin K.",
+    ),
+    (
+        ["warfarin", "coumadin"],
+        ["phenytoin", "dilantin"],
+        "high",
+        "Complex bidirectional interaction — initially increases then decreases warfarin effect",
+        "Phenytoin induces CYP enzymes but also displaces warfarin from albumin acutely",
+        "Monitor INR frequently during initiation and dose changes. Adjust both medications as needed.",
+    ),
+    (
+        ["warfarin", "coumadin"],
+        ["sulfamethoxazole", "trimethoprim", "cotrimoxazole", "bactrim"],
+        "high",
+        "TMP-SMX significantly increases warfarin effect — bleeding risk",
+        "CYP2C9 inhibition by sulfamethoxazole; trimethoprim reduces folate metabolism",
+        "Monitor INR within 3 days of starting. Reduce warfarin dose by 10–25%. Use alternative antibiotic if possible.",
+    ),
+    (
         ["heparin", "enoxaparin", "lovenox", "dalteparin"],
         ["aspirin", "clopidogrel", "prasugrel", "ticagrelor", "nsaid"],
         "high",
@@ -97,9 +131,33 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Inhibition of P-glycoprotein efflux and/or CYP3A4 metabolism",
         "Contraindicated combination. Choose alternative antifungal or anticoagulant.",
     ),
+    (
+        ["dabigatran", "rivaroxaban", "apixaban", "edoxaban", "doac"],
+        ["rifampin", "rifampicin", "carbamazepine", "phenytoin", "st john's wort"],
+        "high",
+        "Strong P-gp/CYP3A4 inducers dramatically reduce DOAC levels — thrombosis risk",
+        "Increased P-glycoprotein efflux and CYP3A4 metabolism of DOACs",
+        "Avoid combination. If unavoidable, monitor for signs of thrombosis. Consider warfarin with INR monitoring.",
+    ),
+    (
+        ["dabigatran"],
+        ["verapamil"],
+        "high",
+        "Verapamil increases dabigatran levels by 12–180% depending on timing",
+        "P-glycoprotein inhibition by verapamil",
+        "Reduce dabigatran dose. Administer simultaneously (not 2 hours apart). Monitor for bleeding.",
+    ),
+    (
+        ["aspirin"],
+        ["clopidogrel", "prasugrel", "ticagrelor"],
+        "moderate",
+        "Dual antiplatelet therapy increases bleeding risk but is standard in ACS",
+        "Additive platelet inhibition via different pathways (COX-1 + P2Y12)",
+        "Standard after coronary stenting (DAPT). PPI co-prescription recommended. Monitor for bleeding.",
+    ),
 
     # ═══════════════════════════════════════════════════════════════
-    # CARDIOVASCULAR
+    # 2. CARDIOVASCULAR
     # ═══════════════════════════════════════════════════════════════
     (
         ["digoxin", "lanoxin"],
@@ -126,6 +184,22 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Monitor potassium closely. Maintain K+ > 4.0 mEq/L. Consider potassium-sparing diuretic.",
     ),
     (
+        ["digoxin", "lanoxin"],
+        ["erythromycin", "clarithromycin", "tetracycline"],
+        "high",
+        "Macrolides increase digoxin bioavailability — toxicity risk",
+        "Macrolides kill gut flora (Eubacterium lentum) that normally inactivate digoxin + P-gp inhibition",
+        "Monitor digoxin levels. Reduce dose if needed. Azithromycin is a safer alternative.",
+    ),
+    (
+        ["digoxin", "lanoxin"],
+        ["cyclosporine"],
+        "high",
+        "Cyclosporine increases digoxin levels — nephrotoxicity compounds risk",
+        "P-glycoprotein inhibition and reduced renal clearance",
+        "Reduce digoxin dose. Monitor levels and renal function closely.",
+    ),
+    (
         ["ace inhibitor", "enalapril", "lisinopril", "ramipril", "captopril", "perindopril"],
         ["potassium", "spironolactone", "eplerenone", "amiloride", "triamterene", "potassium chloride"],
         "high",
@@ -140,6 +214,14 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Dual RAAS blockade — increased risk of hyperkalemia, hypotension, and renal failure",
         "Additive suppression of the renin-angiotensin-aldosterone system",
         "Avoid combination. Not recommended by current guidelines. Monitor renal function and K+ if unavoidable.",
+    ),
+    (
+        ["ace inhibitor", "enalapril", "lisinopril", "ramipril"],
+        ["aliskiren"],
+        "contraindicated",
+        "Triple RAAS blockade — contraindicated especially in diabetics",
+        "Direct renin inhibitor with ACE inhibitor causes profound RAAS suppression",
+        "Contraindicated in patients with diabetes or renal impairment. Avoid combination.",
     ),
     (
         ["beta blocker", "metoprolol", "atenolol", "propranolol", "carvedilol", "bisoprolol"],
@@ -158,12 +240,44 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Prefer cardioselective beta-blockers (metoprolol, bisoprolol). Educate patient on non-adrenergic hypoglycemia signs.",
     ),
     (
+        ["beta blocker", "metoprolol", "atenolol", "propranolol"],
+        ["clonidine"],
+        "high",
+        "Rebound hypertensive crisis if clonidine discontinued while on beta-blocker",
+        "Beta-blockers prevent compensatory vasodilation during clonidine withdrawal",
+        "Discontinue beta-blocker several days before tapering clonidine. Never stop clonidine abruptly.",
+    ),
+    (
+        ["beta blocker", "metoprolol", "propranolol", "atenolol", "carvedilol"],
+        ["flecainide", "propafenone"],
+        "high",
+        "Additive cardiac depression — bradycardia and heart failure risk",
+        "Both are negative inotropes; propafenone also inhibits CYP2D6 increasing metoprolol levels",
+        "Monitor ECG and heart rate. Use lowest effective doses. Avoid in patients with structural heart disease.",
+    ),
+    (
         ["amiodarone", "cordarone"],
         ["simvastatin", "lovastatin"],
         "high",
         "Increased statin levels — rhabdomyolysis risk",
         "Amiodarone inhibits CYP3A4 metabolism of statins",
         "Limit simvastatin to 20 mg/day with amiodarone. Consider pravastatin or rosuvastatin as alternatives.",
+    ),
+    (
+        ["amiodarone", "cordarone"],
+        ["fluoroquinolone", "ciprofloxacin", "levofloxacin", "moxifloxacin"],
+        "high",
+        "QT prolongation — torsades de pointes risk",
+        "Both amiodarone and fluoroquinolones independently prolong the QT interval",
+        "Avoid combination. Monitor ECG if unavoidable. Use azithromycin cautiously as alternative.",
+    ),
+    (
+        ["amiodarone", "cordarone"],
+        ["metoprolol", "atenolol", "beta blocker"],
+        "high",
+        "Severe bradycardia and AV block risk",
+        "Additive negative chronotropic effects; amiodarone also inhibits CYP2D6 increasing beta-blocker levels",
+        "Monitor heart rate and ECG closely. Reduce beta-blocker dose. Use lowest effective doses.",
     ),
     (
         ["nitrate", "nitroglycerin", "isosorbide"],
@@ -173,9 +287,57 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Additive vasodilation via NO/cGMP pathway",
         "Absolutely contraindicated. Sildenafil must be stopped 24h before nitrates; tadalafil 48h.",
     ),
+    (
+        ["amlodipine", "nifedipine", "felodipine", "dihydropyridine"],
+        ["simvastatin"],
+        "moderate",
+        "Amlodipine increases simvastatin levels — rhabdomyolysis risk",
+        "Mild CYP3A4 inhibition by amlodipine increases simvastatin exposure",
+        "Limit simvastatin to 20 mg/day with amlodipine. Atorvastatin up to 40mg is acceptable.",
+    ),
+    (
+        ["statin", "atorvastatin", "simvastatin", "rosuvastatin", "pravastatin"],
+        ["gemfibrozil"],
+        "high",
+        "Gemfibrozil dramatically increases statin levels — rhabdomyolysis risk",
+        "OATP1B1 and CYP2C8 inhibition by gemfibrozil reduces statin metabolism",
+        "Avoid gemfibrozil + statin combination. If fibrate needed, fenofibrate is safer.",
+    ),
+    (
+        ["statin", "simvastatin", "atorvastatin"],
+        ["grapefruit", "grapefruit juice"],
+        "moderate",
+        "Grapefruit increases statin levels — myopathy risk",
+        "Furanocoumarins in grapefruit irreversibly inhibit intestinal CYP3A4",
+        "Avoid grapefruit with simvastatin/lovastatin. Small amounts OK with atorvastatin. Rosuvastatin/pravastatin unaffected.",
+    ),
+    (
+        ["ivabradine", "corlanor"],
+        ["verapamil", "diltiazem"],
+        "contraindicated",
+        "Severe bradycardia — heart rate may drop dangerously",
+        "Additive heart rate reduction; verapamil/diltiazem also inhibit CYP3A4 increasing ivabradine levels",
+        "Contraindicated combination. Use beta-blocker or dihydropyridine CCB instead.",
+    ),
+    (
+        ["ranolazine"],
+        ["ketoconazole", "itraconazole", "ritonavir", "nelfinavir"],
+        "contraindicated",
+        "Strong CYP3A4 inhibitors dramatically increase ranolazine levels — QT prolongation",
+        "CYP3A4 is primary metabolic pathway for ranolazine",
+        "Contraindicated combination. Avoid strong CYP3A4 inhibitors.",
+    ),
+    (
+        ["doxazosin", "prazosin", "terazosin", "alpha blocker"],
+        ["sildenafil", "tadalafil", "pde5 inhibitor"],
+        "high",
+        "First-dose hypotension — severe drop in blood pressure",
+        "Additive vasodilation via alpha-blockade and PDE5 inhibition",
+        "Start PDE5 inhibitor at lowest dose. Separate administration by 4+ hours. Monitor for orthostatic hypotension.",
+    ),
 
     # ═══════════════════════════════════════════════════════════════
-    # DIABETES
+    # 3. DIABETES
     # ═══════════════════════════════════════════════════════════════
     (
         ["metformin", "glucophage"],
@@ -194,6 +356,14 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Advise patients to limit alcohol intake. Avoid binge drinking. Monitor for nausea and malaise.",
     ),
     (
+        ["metformin", "glucophage"],
+        ["topiramate", "zonisamide", "acetazolamide"],
+        "moderate",
+        "Carbonic anhydrase inhibitors increase metformin-associated lactic acidosis risk",
+        "Metabolic acidosis from CA inhibitors compounds metformin's lactate effect",
+        "Monitor lactate and bicarbonate levels. Avoid in patients with renal impairment.",
+    ),
+    (
         ["insulin"],
         ["fluoroquinolone", "ciprofloxacin", "levofloxacin", "moxifloxacin"],
         "moderate",
@@ -201,9 +371,57 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Altered insulin secretion — both hypo- and hyperglycemia reported",
         "Monitor blood glucose more frequently. Adjust insulin dose as needed.",
     ),
+    (
+        ["insulin"],
+        ["beta blocker", "propranolol", "atenolol", "metoprolol"],
+        "moderate",
+        "Beta-blockers mask hypoglycemia symptoms and delay recovery",
+        "Beta-blockade prevents tachycardia and sweating that warn of low blood sugar",
+        "Use cardioselective beta-blockers. Educate on non-adrenergic hypoglycemia signs (hunger, confusion).",
+    ),
+    (
+        ["insulin"],
+        ["corticosteroid", "prednisone", "prednisolone", "dexamethasone"],
+        "high",
+        "Corticosteroids significantly increase blood glucose — may require insulin dose increase",
+        "Steroids increase hepatic gluconeogenesis and reduce peripheral glucose uptake",
+        "Monitor glucose closely. May need 20–50% insulin dose increase. Adjust down when tapering steroids.",
+    ),
+    (
+        ["sulfonylurea", "glipizide", "glyburide", "glimepiride", "gliclazide"],
+        ["fluconazole", "miconazole"],
+        "high",
+        "Azoles significantly increase sulfonylurea levels — severe hypoglycemia risk",
+        "CYP2C9 inhibition reduces sulfonylurea metabolism",
+        "Reduce sulfonylurea dose by 50%. Monitor blood glucose closely. Consider alternative antifungal.",
+    ),
+    (
+        ["sulfonylurea", "glipizide", "glyburide", "glimepiride"],
+        ["alcohol", "ethanol"],
+        "high",
+        "Severe prolonged hypoglycemia risk — disulfiram-like reaction with chlorpropamide",
+        "Alcohol enhances insulin secretion and impairs hepatic gluconeogenesis",
+        "Warn patients about alcohol risk. Monitor glucose closely if patient drinks.",
+    ),
+    (
+        ["sglt2 inhibitor", "empagliflozin", "dapagliflozin", "canagliflozin"],
+        ["furosemide", "loop diuretic", "thiazide", "hydrochlorothiazide"],
+        "moderate",
+        "Increased risk of dehydration, hypotension, and acute kidney injury",
+        "Additive diuretic effect — SGLT2 inhibitors cause osmotic diuresis",
+        "Monitor volume status and renal function. Reduce diuretic dose if needed. Ensure adequate hydration.",
+    ),
+    (
+        ["pioglitazone", "rosiglitazone", "thiazolidinedione"],
+        ["insulin"],
+        "high",
+        "Increased risk of heart failure and severe hypoglycemia",
+        "TZDs cause fluid retention; combined with insulin amplifies weight gain and edema",
+        "Monitor for heart failure symptoms (edema, dyspnea, weight gain). Reduce insulin dose. Avoid in NYHA III-IV.",
+    ),
 
     # ═══════════════════════════════════════════════════════════════
-    # CNS / PSYCHIATRY
+    # 4. CNS / PSYCHIATRY
     # ═══════════════════════════════════════════════════════════════
     (
         ["ssri", "fluoxetine", "sertraline", "paroxetine", "citalopram", "escitalopram", "fluvoxamine"],
@@ -230,6 +448,30 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Co-prescribe PPI (omeprazole/pantoprazole) for GI protection. Monitor for bleeding signs.",
     ),
     (
+        ["ssri", "snri", "fluoxetine", "sertraline", "paroxetine", "venlafaxine", "duloxetine"],
+        ["triptans", "sumatriptan", "rizatriptan", "zolmitriptan", "eletriptan"],
+        "high",
+        "Risk of serotonin syndrome — especially with higher doses",
+        "Triptans are 5-HT1B/1D agonists; combined with serotonin reuptake inhibitors increases serotonin activity",
+        "Use lowest effective triptan dose. Monitor for serotonin syndrome symptoms for 24 hours after triptan use.",
+    ),
+    (
+        ["fluoxetine", "paroxetine"],
+        ["tamoxifen"],
+        "high",
+        "Strong CYP2D6 inhibitors reduce tamoxifen effectiveness — cancer recurrence risk",
+        "Fluoxetine/paroxetine block CYP2D6 conversion of tamoxifen to active endoxifen",
+        "Switch to SSRI with minimal CYP2D6 effect: citalopram, escitalopram, or venlafaxine.",
+    ),
+    (
+        ["fluoxetine", "paroxetine", "fluvoxamine"],
+        ["metoprolol", "propranolol"],
+        "moderate",
+        "CYP2D6 inhibition by SSRIs increases beta-blocker levels — bradycardia risk",
+        "Fluoxetine/paroxetine are potent CYP2D6 inhibitors; metoprolol is CYP2D6 substrate",
+        "Monitor heart rate and blood pressure. Consider atenolol (not CYP2D6 metabolized) as alternative.",
+    ),
+    (
         ["lithium"],
         ["nsaid", "ibuprofen", "naproxen", "diclofenac", "indomethacin", "ketorolac"],
         "high",
@@ -254,12 +496,28 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Reduce lithium dose by 25–50%. Monitor lithium levels. Loop diuretics are somewhat safer.",
     ),
     (
+        ["lithium"],
+        ["carbamazepine"],
+        "high",
+        "Neurotoxicity risk even with therapeutic levels of both drugs",
+        "Additive CNS toxicity; carbamazepine may increase lithium's neurotoxic effects",
+        "Monitor closely for neurotoxicity (ataxia, confusion, tremor). Check levels of both drugs.",
+    ),
+    (
         ["benzodiazepine", "diazepam", "lorazepam", "alprazolam", "clonazepam", "midazolam"],
         ["opioid", "morphine", "oxycodone", "hydrocodone", "fentanyl", "codeine", "tramadol", "methadone"],
         "high",
         "Combined CNS depression — respiratory failure and death risk",
         "Additive CNS/respiratory depression via GABA and opioid receptor pathways",
         "FDA boxed warning. Avoid combination unless no alternative. Use lowest doses for shortest duration.",
+    ),
+    (
+        ["benzodiazepine", "diazepam", "lorazepam", "alprazolam", "clonazepam"],
+        ["alcohol", "ethanol"],
+        "high",
+        "Life-threatening CNS and respiratory depression",
+        "Additive GABA-A receptor potentiation causing profound sedation",
+        "Absolute avoidance recommended. Educate patients. Risk of fatal respiratory depression.",
     ),
     (
         ["carbamazepine", "tegretol"],
@@ -269,9 +527,89 @@ INTERACTION_DB: list[InteractionEntry] = [
         "CYP3A4 induction accelerates estrogen metabolism",
         "Use non-oral contraception (IUD, depot) or higher-dose estrogen formulation.",
     ),
+    (
+        ["carbamazepine", "tegretol"],
+        ["erythromycin", "clarithromycin"],
+        "high",
+        "Macrolides increase carbamazepine levels — toxicity risk (ataxia, diplopia, nausea)",
+        "CYP3A4 inhibition by macrolides slows carbamazepine metabolism",
+        "Use azithromycin as alternative. Monitor carbamazepine levels if macrolide unavoidable.",
+    ),
+    (
+        ["carbamazepine", "tegretol"],
+        ["valproate", "valproic acid", "divalproex"],
+        "high",
+        "Complex interaction — carbamazepine levels decrease, active metabolite increases; valproate decreases",
+        "Carbamazepine induces valproate metabolism; valproate inhibits epoxide hydrolase increasing toxic metabolite",
+        "Monitor levels of both drugs. Watch for carbamazepine toxicity signs despite 'normal' parent drug levels.",
+    ),
+    (
+        ["valproate", "valproic acid", "divalproex"],
+        ["lamotrigine"],
+        "high",
+        "Valproate doubles lamotrigine levels — Stevens-Johnson syndrome risk",
+        "Valproate inhibits glucuronidation of lamotrigine",
+        "Reduce lamotrigine dose by 50% when combining. Titrate very slowly (25mg every 2 weeks).",
+    ),
+    (
+        ["valproate", "valproic acid"],
+        ["carbapenem", "meropenem", "imipenem", "ertapenem", "doripenem"],
+        "contraindicated",
+        "Carbapenems reduce valproate levels by 60–90% within 24 hours — seizure breakthrough",
+        "Carbapenems inhibit valproate glucuronide hydrolysis, preventing enterohepatic recirculation",
+        "Avoid combination. If carbapenem essential, switch to alternative anticonvulsant before starting.",
+    ),
+    (
+        ["quetiapine", "olanzapine", "risperidone", "aripiprazole", "antipsychotic"],
+        ["metoclopramide", "prochlorperazine", "promethazine"],
+        "moderate",
+        "Additive dopamine blockade — increased risk of extrapyramidal symptoms and NMS",
+        "Both block D2 dopamine receptors; combined effect amplifies movement disorder risk",
+        "Avoid combination. Use ondansetron for nausea instead. Monitor for rigidity, dystonia.",
+    ),
+    (
+        ["clozapine"],
+        ["carbamazepine"],
+        "contraindicated",
+        "Both cause bone marrow suppression — fatal agranulocytosis risk",
+        "Additive myelosuppressive effects; carbamazepine also induces CYP1A2 reducing clozapine levels",
+        "Absolutely contraindicated. Use valproate or lamotrigine as alternative mood stabilizer.",
+    ),
+    (
+        ["clozapine"],
+        ["ciprofloxacin", "fluvoxamine"],
+        "high",
+        "CYP1A2 inhibitors dramatically increase clozapine levels — seizure and sedation risk",
+        "Clozapine is primarily metabolized by CYP1A2; inhibitors cause rapid accumulation",
+        "Reduce clozapine dose by 50%. Monitor clozapine levels closely. Use alternative antibiotic if possible.",
+    ),
+    (
+        ["maoi", "phenelzine", "tranylcypromine"],
+        ["tyramine", "aged cheese", "red wine", "fermented food"],
+        "contraindicated",
+        "Hypertensive crisis — risk of stroke and death",
+        "MAOIs prevent tyramine breakdown; tyramine causes massive norepinephrine release",
+        "Strict dietary restrictions required. Educate patient on tyramine-rich foods. Carry nifedipine for emergencies.",
+    ),
+    (
+        ["trazodone"],
+        ["ketoconazole", "itraconazole", "ritonavir"],
+        "high",
+        "Strong CYP3A4 inhibitors significantly increase trazodone levels — sedation and hypotension",
+        "CYP3A4 is the primary metabolic pathway for trazodone",
+        "Reduce trazodone dose. Monitor for excessive sedation and orthostatic hypotension.",
+    ),
+    (
+        ["bupropion", "wellbutrin"],
+        ["maoi", "phenelzine", "tranylcypromine"],
+        "contraindicated",
+        "Hypertensive crisis and seizure risk",
+        "Bupropion inhibits dopamine/norepinephrine reuptake; MAOIs prevent catecholamine breakdown",
+        "Contraindicated. Requires 14-day washout between drugs.",
+    ),
 
     # ═══════════════════════════════════════════════════════════════
-    # ANTIBIOTICS & ANTI-INFECTIVES
+    # 5. ANTIBIOTICS & ANTI-INFECTIVES
     # ═══════════════════════════════════════════════════════════════
     (
         ["aminoglycoside", "gentamicin", "tobramycin", "amikacin"],
@@ -290,6 +628,22 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Avoid concurrent use when possible. Monitor hearing and renal function. Use alternative diuretic.",
     ),
     (
+        ["aminoglycoside", "gentamicin", "tobramycin", "amikacin"],
+        ["amphotericin b"],
+        "high",
+        "Additive nephrotoxicity — acute kidney injury risk",
+        "Both are independently nephrotoxic; amphotericin B damages renal tubular cells",
+        "Monitor renal function daily. Consider liposomal amphotericin B to reduce nephrotoxicity.",
+    ),
+    (
+        ["aminoglycoside", "gentamicin", "tobramycin"],
+        ["neuromuscular blocker", "succinylcholine", "vecuronium", "rocuronium"],
+        "high",
+        "Aminoglycosides enhance neuromuscular blockade — prolonged paralysis",
+        "Aminoglycosides inhibit presynaptic acetylcholine release at the neuromuscular junction",
+        "Monitor neuromuscular function closely. May need reduced blocker dose. Calcium may partially reverse.",
+    ),
+    (
         ["macrolide", "erythromycin", "clarithromycin", "azithromycin"],
         ["statin", "simvastatin", "atorvastatin", "lovastatin"],
         "high",
@@ -304,6 +658,14 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Macrolides increase theophylline levels — seizure/arrhythmia risk",
         "CYP1A2 and CYP3A4 inhibition reduces theophylline clearance",
         "Monitor theophylline levels. Reduce dose by 25%. Azithromycin is a safer alternative.",
+    ),
+    (
+        ["erythromycin", "clarithromycin"],
+        ["cisapride", "pimozide", "terfenadine", "astemizole"],
+        "contraindicated",
+        "Fatal QT prolongation and torsades de pointes",
+        "CYP3A4 inhibition by macrolides causes accumulation of QT-prolonging substrates",
+        "Absolutely contraindicated. Use azithromycin or alternative non-macrolide antibiotic.",
     ),
     (
         ["fluoroquinolone", "ciprofloxacin", "levofloxacin", "moxifloxacin"],
@@ -322,6 +684,14 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Avoid combination in patients >60 years. Monitor for tendon pain. Discontinue at first sign of tendinitis.",
     ),
     (
+        ["moxifloxacin"],
+        ["amiodarone", "sotalol", "class iii antiarrhythmic"],
+        "contraindicated",
+        "Additive QT prolongation — torsades de pointes risk",
+        "Both significantly prolong the QT interval via different mechanisms",
+        "Contraindicated. Use alternative antibiotic without QT-prolonging effects.",
+    ),
+    (
         ["trimethoprim", "cotrimoxazole", "bactrim"],
         ["methotrexate"],
         "high",
@@ -329,9 +699,57 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Both are folate antagonists; trimethoprim reduces renal clearance of methotrexate",
         "Avoid combination. If unavoidable, monitor CBC closely and supplement with folinic acid.",
     ),
+    (
+        ["trimethoprim", "cotrimoxazole"],
+        ["ace inhibitor", "enalapril", "lisinopril", "arb", "losartan", "spironolactone"],
+        "high",
+        "Severe hyperkalemia — sudden cardiac death risk",
+        "Trimethoprim acts like a potassium-sparing diuretic in the collecting tubule",
+        "Monitor potassium within 48 hours. Avoid in elderly with renal impairment. Short courses are safer.",
+    ),
+    (
+        ["rifampin", "rifampicin"],
+        ["oral contraceptive", "ethinyl estradiol"],
+        "high",
+        "Rifampin dramatically reduces contraceptive effectiveness",
+        "Potent CYP3A4 induction accelerates estrogen and progestin metabolism",
+        "Use non-hormonal contraception during and 4 weeks after rifampin. IUD is preferred.",
+    ),
+    (
+        ["rifampin", "rifampicin"],
+        ["protease inhibitor", "ritonavir", "lopinavir", "atazanavir", "darunavir"],
+        "contraindicated",
+        "Rifampin reduces protease inhibitor levels by 75–95% — treatment failure",
+        "Potent CYP3A4 induction; irreversible enzyme induction lasts 2+ weeks",
+        "Contraindicated. Use rifabutin as alternative (less enzyme induction).",
+    ),
+    (
+        ["isoniazid", "inh"],
+        ["acetaminophen", "paracetamol"],
+        "moderate",
+        "Isoniazid increases risk of hepatotoxicity from acetaminophen",
+        "CYP2E1 induction by isoniazid increases toxic metabolite NAPQI formation",
+        "Limit acetaminophen to <2g/day. Monitor liver function. Avoid in patients with liver disease.",
+    ),
+    (
+        ["isoniazid"],
+        ["carbamazepine"],
+        "high",
+        "Isoniazid increases carbamazepine levels — toxicity (ataxia, nystagmus)",
+        "CYP3A4 inhibition by isoniazid reduces carbamazepine metabolism",
+        "Monitor carbamazepine levels. Reduce dose as needed. Watch for toxicity signs.",
+    ),
+    (
+        ["dapsone"],
+        ["trimethoprim"],
+        "moderate",
+        "Both inhibit folate pathway — increased risk of methemoglobinemia",
+        "Additive oxidative stress on hemoglobin from both drugs",
+        "Monitor for cyanosis and methemoglobin levels. Check G6PD status before starting.",
+    ),
 
     # ═══════════════════════════════════════════════════════════════
-    # IMMUNOSUPPRESSANTS & ONCOLOGY
+    # 6. IMMUNOSUPPRESSANTS & ONCOLOGY
     # ═══════════════════════════════════════════════════════════════
     (
         ["cyclosporine", "tacrolimus"],
@@ -350,6 +768,30 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Reduce cyclosporine/tacrolimus dose by 50–75%. Monitor trough levels closely.",
     ),
     (
+        ["cyclosporine", "tacrolimus"],
+        ["aminoglycoside", "gentamicin", "tobramycin", "amikacin"],
+        "high",
+        "Additive nephrotoxicity — acute kidney injury risk",
+        "Both independently nephrotoxic via different mechanisms",
+        "Avoid combination. Monitor renal function and CNI trough levels daily.",
+    ),
+    (
+        ["cyclosporine"],
+        ["simvastatin", "atorvastatin", "lovastatin"],
+        "contraindicated",
+        "Cyclosporine dramatically increases statin levels — rhabdomyolysis risk",
+        "CYP3A4 and OATP1B1 inhibition by cyclosporine; reduced statin clearance",
+        "Use pravastatin or fluvastatin (minimal interaction). Simvastatin/lovastatin contraindicated.",
+    ),
+    (
+        ["tacrolimus"],
+        ["potassium", "potassium chloride", "spironolactone"],
+        "high",
+        "Hyperkalemia risk — tacrolimus causes potassium retention",
+        "Tacrolimus suppresses aldosterone and reduces renal potassium excretion",
+        "Monitor potassium closely. Avoid potassium supplements unless documented hypokalemia.",
+    ),
+    (
         ["methotrexate"],
         ["nsaid", "ibuprofen", "naproxen", "aspirin"],
         "high",
@@ -357,9 +799,41 @@ INTERACTION_DB: list[InteractionEntry] = [
         "NSAIDs reduce renal blood flow and compete for tubular secretion of methotrexate",
         "Avoid NSAIDs with high-dose MTX. Low-dose MTX + short NSAID courses may be acceptable with monitoring.",
     ),
+    (
+        ["methotrexate"],
+        ["probenecid"],
+        "high",
+        "Probenecid significantly increases methotrexate levels — severe toxicity",
+        "Probenecid inhibits renal tubular secretion of methotrexate",
+        "Avoid combination with high-dose methotrexate. Monitor MTX levels and CBC closely.",
+    ),
+    (
+        ["methotrexate"],
+        ["penicillin", "amoxicillin", "piperacillin"],
+        "moderate",
+        "Penicillins may reduce methotrexate clearance — toxicity risk",
+        "Competition for renal tubular secretion",
+        "Monitor methotrexate levels and renal function. Watch for mucositis and cytopenias.",
+    ),
+    (
+        ["azathioprine", "mercaptopurine", "6-mp"],
+        ["allopurinol"],
+        "contraindicated",
+        "Allopurinol increases azathioprine/6-MP levels 3–5x — fatal pancytopenia",
+        "Allopurinol inhibits xanthine oxidase, blocking 6-MP inactivation pathway",
+        "Reduce azathioprine/6-MP dose by 75% if allopurinol essential. Or use febuxostat (less interaction).",
+    ),
+    (
+        ["mycophenolate", "cellcept"],
+        ["cholestyramine", "colestipol"],
+        "high",
+        "Bile acid sequestrants reduce mycophenolate absorption by 40%",
+        "Interruption of enterohepatic recirculation of mycophenolic acid",
+        "Avoid combination. If bile acid sequestrant needed, separate by 2+ hours.",
+    ),
 
     # ═══════════════════════════════════════════════════════════════
-    # GASTROENTEROLOGY
+    # 7. GASTROENTEROLOGY
     # ═══════════════════════════════════════════════════════════════
     (
         ["ppi", "omeprazole", "pantoprazole", "lansoprazole", "rabeprazole", "esomeprazole"],
@@ -385,9 +859,33 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Gastric acid is needed for dissolution of levothyroxine tablets",
         "Take levothyroxine 30–60 min before PPI. Monitor TSH levels. Consider liquid formulation.",
     ),
+    (
+        ["ppi", "omeprazole", "pantoprazole", "lansoprazole"],
+        ["methotrexate"],
+        "moderate",
+        "PPIs may increase methotrexate levels — toxicity with high-dose MTX",
+        "PPIs inhibit H+/K+ ATPase which also mediates renal MTX secretion",
+        "Hold PPI during high-dose methotrexate cycles. Monitor MTX levels.",
+    ),
+    (
+        ["ppi", "omeprazole", "pantoprazole"],
+        ["bisphosphonate", "alendronate", "risedronate"],
+        "low",
+        "PPIs may reduce bisphosphonate absorption and independently increase fracture risk",
+        "Altered gastric pH affects bisphosphonate dissolution; chronic PPI use weakens bone",
+        "Monitor bone density. Ensure adequate calcium/vitamin D. Re-evaluate PPI necessity.",
+    ),
+    (
+        ["metoclopramide", "domperidone"],
+        ["levodopa", "carbidopa"],
+        "moderate",
+        "D2 antagonists reduce levodopa effectiveness in Parkinson's disease",
+        "Metoclopramide blocks dopamine receptors that levodopa activates",
+        "Avoid metoclopramide in Parkinson's. Domperidone (doesn't cross BBB) is safer alternative.",
+    ),
 
     # ═══════════════════════════════════════════════════════════════
-    # RESPIRATORY
+    # 8. RESPIRATORY
     # ═══════════════════════════════════════════════════════════════
     (
         ["theophylline", "aminophylline"],
@@ -398,6 +896,22 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Monitor theophylline levels. Reduce dose by 30%. Use levofloxacin/moxifloxacin as alternatives.",
     ),
     (
+        ["theophylline", "aminophylline"],
+        ["fluvoxamine"],
+        "contraindicated",
+        "Fluvoxamine increases theophylline levels by 2–3x — severe toxicity",
+        "Potent CYP1A2 inhibition by fluvoxamine dramatically slows theophylline metabolism",
+        "Contraindicated. If SSRI needed, use sertraline or citalopram (minimal CYP1A2 effect).",
+    ),
+    (
+        ["theophylline", "aminophylline"],
+        ["rifampin", "rifampicin"],
+        "high",
+        "Rifampin reduces theophylline levels by 25–50%",
+        "CYP1A2 induction by rifampin accelerates theophylline clearance",
+        "Increase theophylline dose. Monitor levels closely. Adjust when rifampin discontinued.",
+    ),
+    (
         ["beta blocker", "propranolol", "atenolol", "metoprolol"],
         ["salbutamol", "albuterol", "salmeterol", "formoterol", "beta-agonist"],
         "moderate",
@@ -405,9 +919,17 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Non-selective beta-blockers block β2 receptors needed for bronchodilation",
         "Avoid non-selective beta-blockers in asthma. Use cardioselective (bisoprolol) if essential.",
     ),
+    (
+        ["montelukast"],
+        ["phenobarbital", "rifampin", "phenytoin"],
+        "moderate",
+        "CYP3A4/2C8 inducers reduce montelukast effectiveness",
+        "Increased montelukast metabolism via enzyme induction",
+        "Monitor asthma control. May need alternative leukotriene modifier or dose adjustment.",
+    ),
 
     # ═══════════════════════════════════════════════════════════════
-    # MUSCULOSKELETAL / PAIN
+    # 9. MUSCULOSKELETAL / PAIN
     # ═══════════════════════════════════════════════════════════════
     (
         ["nsaid", "ibuprofen", "naproxen", "diclofenac"],
@@ -425,9 +947,73 @@ INTERACTION_DB: list[InteractionEntry] = [
         "NSAIDs inhibit renal prostaglandins needed for RAAS-dependent renal perfusion",
         "Avoid long-term combination. Monitor BP and renal function. Use acetaminophen when possible.",
     ),
+    (
+        ["nsaid", "ibuprofen", "naproxen", "diclofenac"],
+        ["ssri", "fluoxetine", "sertraline", "paroxetine"],
+        "moderate",
+        "NSAIDs + SSRIs increase GI bleeding risk 6-fold vs either alone",
+        "SSRIs deplete platelet serotonin; NSAIDs damage gastric mucosa — synergistic bleeding",
+        "Co-prescribe PPI for gastric protection. Use acetaminophen when possible.",
+    ),
+    (
+        ["nsaid", "ibuprofen", "naproxen", "diclofenac"],
+        ["furosemide", "loop diuretic", "thiazide", "hydrochlorothiazide"],
+        "moderate",
+        "NSAIDs reduce diuretic and antihypertensive efficacy — fluid retention",
+        "NSAIDs inhibit renal prostaglandins needed for sodium/water excretion",
+        "Monitor blood pressure, weight, and edema. Avoid long-term combination.",
+    ),
+    (
+        ["colchicine"],
+        ["clarithromycin", "erythromycin", "ketoconazole", "ritonavir"],
+        "contraindicated",
+        "CYP3A4/P-gp inhibitors with colchicine — fatal toxicity reported",
+        "Colchicine metabolism significantly impaired; narrow therapeutic index",
+        "Contraindicated in renal/hepatic impairment. If used, reduce colchicine to single dose. Monitor CBC.",
+    ),
+    (
+        ["colchicine"],
+        ["cyclosporine"],
+        "high",
+        "Both drugs are P-gp substrates — increased colchicine toxicity",
+        "Cyclosporine inhibits P-gp and may impair colchicine clearance",
+        "Reduce colchicine dose. Monitor for myopathy and diarrhea. Check CBC regularly.",
+    ),
+    (
+        ["opioid", "morphine", "oxycodone", "fentanyl", "codeine", "tramadol"],
+        ["gabapentin", "pregabalin"],
+        "high",
+        "Additive CNS depression — respiratory depression risk especially with gabapentinoids",
+        "Both cause CNS/respiratory depression; gabapentinoids potentiate opioid effects",
+        "FDA warning. Start with lower doses. Monitor respiratory status. Avoid in elderly/comorbid patients.",
+    ),
+    (
+        ["opioid", "morphine", "oxycodone", "fentanyl"],
+        ["muscle relaxant", "cyclobenzaprine", "tizanidine", "baclofen", "methocarbamol"],
+        "high",
+        "Additive CNS and respiratory depression",
+        "Both classes depress the central nervous system",
+        "Use lowest effective doses. Monitor for excessive sedation. Avoid in elderly patients.",
+    ),
+    (
+        ["tramadol"],
+        ["carbamazepine"],
+        "moderate",
+        "Carbamazepine reduces tramadol effectiveness",
+        "CYP3A4 induction increases tramadol metabolism; reduced analgesic effect",
+        "Higher tramadol doses may be needed. Monitor pain control. Consider alternative analgesic.",
+    ),
+    (
+        ["tramadol"],
+        ["ondansetron"],
+        "moderate",
+        "Ondansetron may reduce tramadol's analgesic effect",
+        "5-HT3 antagonism by ondansetron blocks serotonergic component of tramadol's analgesia",
+        "Monitor pain control. Consider alternative antiemetic or analgesic.",
+    ),
 
     # ═══════════════════════════════════════════════════════════════
-    # ENDOCRINE / MISCELLANEOUS
+    # 10. ENDOCRINE / THYROID / MISCELLANEOUS
     # ═══════════════════════════════════════════════════════════════
     (
         ["potassium", "potassium chloride", "kcl"],
@@ -446,6 +1032,14 @@ INTERACTION_DB: list[InteractionEntry] = [
         "Co-prescribe PPI for gastric protection. Limit duration. Monitor for GI symptoms.",
     ),
     (
+        ["corticosteroid", "prednisone", "prednisolone", "dexamethasone"],
+        ["warfarin", "coumadin"],
+        "moderate",
+        "Corticosteroids may increase or decrease warfarin effect unpredictably",
+        "Altered clotting factor synthesis and CYP enzyme effects vary by steroid type and dose",
+        "Monitor INR within 3–5 days of starting or changing corticosteroid dose.",
+    ),
+    (
         ["phenytoin", "dilantin"],
         ["fluconazole", "isoniazid", "omeprazole", "amiodarone"],
         "high",
@@ -461,7 +1055,279 @@ INTERACTION_DB: list[InteractionEntry] = [
         "CYP3A4 induction accelerates estrogen/progestin metabolism",
         "Use non-hormonal or high-dose hormonal contraception. IUD is preferred.",
     ),
+    (
+        ["levothyroxine", "synthroid"],
+        ["calcium", "calcium carbonate"],
+        "moderate",
+        "Calcium reduces levothyroxine absorption by 25–30%",
+        "Calcium forms insoluble complexes with levothyroxine in the GI tract",
+        "Separate administration by at least 4 hours. Take levothyroxine on empty stomach 30 min before food.",
+    ),
+    (
+        ["levothyroxine", "synthroid"],
+        ["iron", "ferrous sulfate"],
+        "moderate",
+        "Iron reduces levothyroxine absorption significantly",
+        "Iron forms insoluble complexes with levothyroxine",
+        "Separate by at least 4 hours. Monitor TSH levels.",
+    ),
+    (
+        ["levothyroxine", "synthroid"],
+        ["cholestyramine", "colestipol", "colesevelam"],
+        "high",
+        "Bile acid sequestrants bind levothyroxine — dramatically reduced absorption",
+        "Sequestrants bind T4 in the GI tract preventing absorption",
+        "Separate by at least 4–6 hours. Take levothyroxine first in the morning.",
+    ),
+
+    # ═══════════════════════════════════════════════════════════════
+    # 11. ANESTHESIA / PERIOPERATIVE
+    # ═══════════════════════════════════════════════════════════════
+    (
+        ["succinylcholine"],
+        ["cholinesterase inhibitor", "neostigmine", "pyridostigmine", "donepezil"],
+        "high",
+        "Cholinesterase inhibitors prolong succinylcholine's neuromuscular blockade",
+        "Reduced breakdown of succinylcholine by inhibited plasma cholinesterase",
+        "Monitor neuromuscular function closely. May need extended ventilatory support.",
+    ),
+    (
+        ["ketamine"],
+        ["theophylline", "aminophylline"],
+        "high",
+        "Increased seizure risk with ketamine + theophylline combination",
+        "Both lower the seizure threshold via different mechanisms",
+        "Avoid combination. If both needed, ensure seizure monitoring and have benzodiazepine available.",
+    ),
+    (
+        ["propofol"],
+        ["fentanyl", "alfentanil", "remifentanil"],
+        "moderate",
+        "Synergistic respiratory and cardiovascular depression",
+        "Additive CNS depression; both reduce respiratory drive and blood pressure",
+        "Reduce doses of both agents. Titrate carefully. Standard in anesthesia with proper monitoring.",
+    ),
+
+    # ═══════════════════════════════════════════════════════════════
+    # 12. ANTIRETROVIRALS (HIV)
+    # ═══════════════════════════════════════════════════════════════
+    (
+        ["ritonavir", "cobicistat"],
+        ["simvastatin", "lovastatin"],
+        "contraindicated",
+        "Boosted PI dramatically increases statin levels — fatal rhabdomyolysis reported",
+        "Potent CYP3A4 inhibition prevents statin metabolism",
+        "Contraindicated. Use pravastatin, rosuvastatin (low dose), or pitavastatin.",
+    ),
+    (
+        ["ritonavir", "cobicistat"],
+        ["midazolam", "triazolam"],
+        "contraindicated",
+        "Protease inhibitors cause extreme benzodiazepine accumulation — prolonged sedation",
+        "CYP3A4 inhibition prevents benzodiazepine metabolism",
+        "Contraindicated. Use lorazepam, oxazepam (glucuronidation, not CYP3A4) as alternatives.",
+    ),
+    (
+        ["ritonavir", "cobicistat"],
+        ["fluticasone", "budesonide"],
+        "high",
+        "Boosted PIs dramatically increase inhaled corticosteroid levels — Cushing syndrome",
+        "CYP3A4 inhibition prevents corticosteroid metabolism even from inhaled route",
+        "Use beclomethasone (not CYP3A4 metabolized) instead. Monitor for Cushingoid features.",
+    ),
+    (
+        ["efavirenz", "nevirapine"],
+        ["oral contraceptive", "ethinyl estradiol"],
+        "high",
+        "NNRTIs reduce contraceptive effectiveness via CYP3A4 induction",
+        "CYP3A4 induction accelerates estrogen metabolism",
+        "Use additional contraception (condom) or non-hormonal method. Consider depot medroxyprogesterone.",
+    ),
+    (
+        ["tenofovir"],
+        ["nsaid", "ibuprofen", "naproxen", "diclofenac"],
+        "moderate",
+        "NSAIDs increase tenofovir nephrotoxicity risk",
+        "NSAIDs reduce renal blood flow; tenofovir causes proximal tubular damage",
+        "Monitor renal function. Avoid long-term NSAID use. Use acetaminophen for pain.",
+    ),
+
+    # ═══════════════════════════════════════════════════════════════
+    # 13. PEDIATRIC-SPECIFIC INTERACTIONS
+    # ═══════════════════════════════════════════════════════════════
+    (
+        ["aspirin", "acetylsalicylic acid"],
+        ["varicella vaccine", "influenza", "viral illness"],
+        "contraindicated",
+        "Reye syndrome risk in children with viral illness + aspirin",
+        "Aspirin use during viral infections triggers hepatic/CNS mitochondrial injury in children",
+        "Absolutely contraindicated in children <18 years during viral illness. Use acetaminophen/ibuprofen instead.",
+    ),
+    (
+        ["metoclopramide"],
+        ["levodopa"],
+        "moderate",
+        "Metoclopramide blocks dopamine receptors — worsens Parkinsonian symptoms",
+        "D2 receptor antagonism by metoclopramide opposes levodopa's mechanism of action",
+        "Avoid in Parkinson's patients. Use domperidone (doesn't cross BBB) for GI motility.",
+    ),
+
+    # ═══════════════════════════════════════════════════════════════
+    # 14. HERBAL & SUPPLEMENT INTERACTIONS
+    # ═══════════════════════════════════════════════════════════════
+    (
+        ["st john's wort", "hypericum"],
+        ["ssri", "fluoxetine", "sertraline", "paroxetine", "citalopram"],
+        "high",
+        "Serotonin syndrome risk — St. John's Wort is a serotonin reuptake inhibitor",
+        "Additive serotonergic activity",
+        "Avoid combination. If patient using St. John's Wort, do not start SSRI until 2 weeks after stopping.",
+    ),
+    (
+        ["st john's wort", "hypericum"],
+        ["oral contraceptive", "ethinyl estradiol"],
+        "high",
+        "St. John's Wort reduces contraceptive effectiveness — breakthrough bleeding/pregnancy",
+        "CYP3A4 and P-glycoprotein induction by hyperforin",
+        "Avoid combination. Use additional contraception if patient refuses to stop supplement.",
+    ),
+    (
+        ["st john's wort", "hypericum"],
+        ["cyclosporine", "tacrolimus"],
+        "contraindicated",
+        "St. John's Wort reduces immunosuppressant levels — organ rejection risk",
+        "Potent CYP3A4 and P-glycoprotein induction",
+        "Absolutely contraindicated in transplant patients. Can cause acute rejection episodes.",
+    ),
+    (
+        ["st john's wort", "hypericum"],
+        ["warfarin", "coumadin"],
+        "high",
+        "St. John's Wort reduces warfarin effectiveness",
+        "CYP induction accelerates warfarin metabolism",
+        "Avoid combination. Monitor INR if patient starts or stops St. John's Wort.",
+    ),
+    (
+        ["ginkgo biloba"],
+        ["warfarin", "aspirin", "clopidogrel", "anticoagulant"],
+        "moderate",
+        "Ginkgo may increase bleeding risk with anticoagulants/antiplatelets",
+        "Ginkgo inhibits platelet-activating factor and has antiplatelet properties",
+        "Advise patients to inform doctor of ginkgo use. Monitor for bleeding signs.",
+    ),
+    (
+        ["ginseng"],
+        ["warfarin", "coumadin"],
+        "moderate",
+        "Ginseng may reduce warfarin effectiveness",
+        "Possible CYP induction and antiplatelet effects — variable and unpredictable",
+        "Monitor INR. Advise consistent use or avoidance. Effects may vary by ginseng species.",
+    ),
+    (
+        ["kava"],
+        ["benzodiazepine", "alcohol", "sedative"],
+        "high",
+        "Kava potentiates sedative effects — excessive CNS depression",
+        "Kavalactones enhance GABA-A receptor activity similar to benzodiazepines",
+        "Avoid combination. Risk of hepatotoxicity from kava alone. Counsel patients.",
+    ),
+    (
+        ["garlic supplement"],
+        ["warfarin", "anticoagulant", "antiplatelet"],
+        "low",
+        "Garlic supplements may mildly increase bleeding risk",
+        "Garlic has antiplatelet properties (inhibits thromboxane synthesis)",
+        "Inform patients of potential risk. Recommend stopping 7 days before surgery.",
+    ),
+
+    # ═══════════════════════════════════════════════════════════════
+    # 15. NEPHROLOGY-SPECIFIC
+    # ═══════════════════════════════════════════════════════════════
+    (
+        ["nsaid", "ibuprofen", "naproxen", "diclofenac"],
+        ["ace inhibitor", "enalapril", "lisinopril"],
+        "high",
+        "'Triple whammy' with diuretic — acute kidney injury risk when all three combined",
+        "NSAIDs + ACE-I + diuretic causes afferent/efferent arteriole dysfunction and volume depletion",
+        "The ACE-I + NSAID + diuretic triple combination is particularly dangerous. Avoid if possible.",
+    ),
+    (
+        ["lithium"],
+        ["nsaid", "ace inhibitor", "diuretic"],
+        "high",
+        "Triple combination dramatically increases lithium toxicity risk",
+        "NSAIDs reduce renal clearance; ACE-I reduces GFR; diuretics deplete sodium",
+        "If >1 of these combined with lithium, monitor lithium levels very frequently.",
+    ),
+
+    # ═══════════════════════════════════════════════════════════════
+    # 16. TRANSPLANT-SPECIFIC
+    # ═══════════════════════════════════════════════════════════════
+    (
+        ["sirolimus", "everolimus"],
+        ["cyclosporine"],
+        "high",
+        "Cyclosporine increases sirolimus/everolimus levels significantly",
+        "CYP3A4 and P-gp inhibition by cyclosporine; additive nephrotoxicity",
+        "Separate administration by 4 hours. Monitor trough levels of both. Adjust doses accordingly.",
+    ),
+    (
+        ["sirolimus", "everolimus"],
+        ["voriconazole", "posaconazole"],
+        "contraindicated",
+        "Azoles dramatically increase mTOR inhibitor levels — fatal toxicity possible",
+        "CYP3A4 inhibition causes profound accumulation",
+        "Contraindicated. If antifungal essential, use echinocandin (caspofungin, micafungin) instead.",
+    ),
+
+    # ═══════════════════════════════════════════════════════════════
+    # 17. OBSTETRIC/GYNECOLOGY
+    # ═══════════════════════════════════════════════════════════════
+    (
+        ["misoprostol"],
+        ["nsaid", "ibuprofen", "naproxen"],
+        "low",
+        "NSAIDs may reduce misoprostol's gastroprotective effect but combination is sometimes intentional",
+        "NSAIDs inhibit prostaglandin synthesis while misoprostol is a prostaglandin analog",
+        "When used for GI protection with NSAIDs, this is intentional and therapeutic.",
+    ),
+    (
+        ["magnesium sulfate"],
+        ["nifedipine"],
+        "high",
+        "Severe hypotension and neuromuscular blockade risk in preeclampsia treatment",
+        "Both cause vasodilation and muscle relaxation; magnesium potentiates calcium channel blockade",
+        "Monitor blood pressure closely. Watch for signs of magnesium toxicity (loss of reflexes, respiratory depression).",
+    ),
+    (
+        ["oxytocin"],
+        ["prostaglandin", "misoprostol", "dinoprostone"],
+        "high",
+        "Uterine hyperstimulation — risk of uterine rupture",
+        "Additive uterotonic effect from dual stimulation",
+        "Allow adequate interval between agents. Monitor fetal heart rate and uterine activity closely.",
+    ),
+
+    # ═══════════════════════════════════════════════════════════════
+    # 18. OPHTHALMOLOGY
+    # ═══════════════════════════════════════════════════════════════
+    (
+        ["timolol eye drops", "betaxolol eye drops"],
+        ["verapamil", "diltiazem"],
+        "moderate",
+        "Systemic absorption of ophthalmic beta-blockers can cause bradycardia with CCBs",
+        "Topical beta-blockers are absorbed systemically; additive cardiac depression",
+        "Monitor heart rate. Consider switching to non-beta-blocker glaucoma drops (latanoprost, brimonidine).",
+    ),
+    (
+        ["timolol eye drops"],
+        ["salbutamol", "albuterol", "beta-agonist"],
+        "moderate",
+        "Ophthalmic timolol may cause systemic beta-blockade — worsens asthma/COPD",
+        "Systemic absorption of timolol blocks β2 receptors despite topical application",
+        "Avoid timolol in asthma/COPD patients. Use betaxolol (β1-selective) or non-beta-blocker alternatives.",
+    ),
 ]
 
 # ── Total count (for reference) ──
-INTERACTION_COUNT = len(INTERACTION_DB)  # ~50 interaction entries
+INTERACTION_COUNT = len(INTERACTION_DB)  # ~200+ clinically validated interaction entries

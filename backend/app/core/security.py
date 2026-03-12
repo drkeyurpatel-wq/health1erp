@@ -1,3 +1,4 @@
+import uuid as _uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
@@ -74,7 +75,8 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(subject: UUID, role: str, extra: dict[str, Any] | None = None) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": str(subject), "role": role, "exp": expire, "type": "access"}
+    jti = str(_uuid.uuid4())
+    payload = {"sub": str(subject), "role": role, "exp": expire, "type": "access", "jti": jti}
     if extra:
         payload.update(extra)
     secret = settings.SECRET_KEY.get_secret_value()
@@ -83,7 +85,8 @@ def create_access_token(subject: UUID, role: str, extra: dict[str, Any] | None =
 
 def create_refresh_token(subject: UUID) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    payload = {"sub": str(subject), "exp": expire, "type": "refresh"}
+    jti = str(_uuid.uuid4())
+    payload = {"sub": str(subject), "exp": expire, "type": "refresh", "jti": jti}
     secret = settings.SECRET_KEY.get_secret_value()
     return jwt.encode(payload, secret, algorithm=settings.JWT_ALGORITHM)
 

@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.middleware.request_context import RequestContextMiddleware
+from app.middleware.rate_limiter import RateLimitMiddleware
 from app.api.v1.router import api_router
 from app.core.websocket import manager as ws_manager
 
@@ -28,6 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RequestContextMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 # Routes
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)

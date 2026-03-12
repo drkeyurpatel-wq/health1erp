@@ -12,6 +12,7 @@ from app.models.ot import OTBooking, OTRoom
 from app.models.audit import AuditLog
 from app.models.organization import Organization, Facility
 from app.models.encounter import Encounter
+from app.models.consent import PatientConsent, PrivacyPreference
 
 __all__ = [
     "User", "Patient", "Appointment",
@@ -26,4 +27,5 @@ __all__ = [
     "AuditLog",
     "Organization", "Facility",
     "Encounter",
+    "PatientConsent", "PrivacyPreference",
 ]
