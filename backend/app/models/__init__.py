@@ -9,6 +9,12 @@ from app.models.pharmacy import Prescription, PrescriptionItem, Dispensation
 from app.models.laboratory import LabTest, LabOrder, LabResult
 from app.models.radiology import RadiologyExam, RadiologyOrder, RadiologyReport
 from app.models.ot import OTBooking, OTRoom
+from app.models.audit import AuditLog
+from app.models.organization import Organization, Facility
+from app.models.encounter import Encounter
+from app.models.consent import PatientConsent, PrivacyPreference
+from app.models.problem_list import ProblemListEntry
+from app.models.follow_up import FollowUp
 
 __all__ = [
     "User", "Patient", "Appointment",
@@ -20,4 +26,10 @@ __all__ = [
     "LabTest", "LabOrder", "LabResult",
     "RadiologyExam", "RadiologyOrder", "RadiologyReport",
     "OTBooking", "OTRoom",
+    "AuditLog",
+    "Organization", "Facility",
+    "Encounter",
+    "PatientConsent", "PrivacyPreference",
+    "ProblemListEntry",
+    "FollowUp",
 ]

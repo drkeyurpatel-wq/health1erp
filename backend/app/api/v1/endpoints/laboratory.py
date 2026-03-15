@@ -16,6 +16,70 @@ from app.schemas.laboratory import (
 router = APIRouter()
 
 
+@router.get("/patient/{patient_id}/results")
+async def get_patient_lab_results(
+    patient_id: UUID,
+    include_pending: bool = False,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(RoleChecker("laboratory:read")),
+):
+    """Get all lab results for a patient — integrates into EMR view."""
+    from sqlalchemy.orm import selectinload
+
+    query = (
+        select(LabOrder)
+        .where(LabOrder.patient_id == patient_id)
+        .options(selectinload(LabOrder.results).selectinload(LabResult.test))
+    )
+    if not include_pending:
+        query = query.where(LabOrder.status == LabOrderStatus.Completed)
+    query = query.order_by(LabOrder.order_date.desc())
+
+    result = await db.execute(query)
+    orders = result.scalars().unique().all()
+
+    response = []
+    for order in orders:
+        order_data = {
+            "order_id": str(order.id),
+            "order_date": order.order_date.isoformat() if order.order_date else None,
+            "priority": order.priority.value if order.priority else "Routine",
+            "status": order.status.value if order.status else "Unknown",
+            "notes": order.notes,
+            "results": [],
+        }
+        for res in (order.results or []):
+            test = res.test
+            result_data = {
+                "result_id": str(res.id),
+                "test_id": str(res.test_id),
+                "test_name": test.name if test else "Unknown Test",
+                "test_code": test.code if test else None,
+                "category": test.category if test else None,
+                "sample_type": test.sample_type if test else None,
+                "result_value": res.result_value,
+                "result_text": res.result_text,
+                "unit": test.unit if test else None,
+                "normal_range": test.normal_range if test else None,
+                "is_abnormal": res.is_abnormal,
+                "verified_at": res.verified_at.isoformat() if res.verified_at else None,
+                "ai_interpretation": res.ai_interpretation,
+            }
+            order_data["results"].append(result_data)
+        response.append(order_data)
+
+    return {
+        "patient_id": str(patient_id),
+        "total_orders": len(response),
+        "orders": response,
+        "has_abnormal": any(
+            r["is_abnormal"]
+            for o in response
+            for r in o["results"]
+        ),
+    }
+
+
 @router.get("/tests")
 async def list_tests(
     category: str = None,

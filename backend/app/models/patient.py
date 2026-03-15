@@ -35,3 +35,5 @@ class Patient(Base):
     bills = relationship("Bill", back_populates="patient")
     lab_orders = relationship("LabOrder", back_populates="patient")
     prescriptions = relationship("Prescription", back_populates="patient")
+    problem_list = relationship("ProblemListEntry", back_populates="patient")
+    follow_ups = relationship("FollowUp", back_populates="patient")

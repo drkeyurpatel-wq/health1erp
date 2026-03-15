@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, Calendar, BedDouble, Receipt,
   Package, Pill, FlaskConical, ScanLine, Scissors,
   BarChart3, Settings, LogOut, Heart, ChevronLeft,
-  ChevronRight, HelpCircle, UserCog,
+  ChevronRight, HelpCircle, UserCog, FileHeart, Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth-store";
@@ -22,6 +22,7 @@ const navGroups = [
     label: "Clinical",
     items: [
       { href: "/patients", label: "Patients", icon: Users },
+      { href: "/emr", label: "EMR / Charting", icon: FileHeart },
       { href: "/appointments", label: "Appointments", icon: Calendar },
       { href: "/ipd", label: "IPD / Inpatient", icon: BedDouble },
     ],
@@ -41,6 +42,7 @@ const navGroups = [
       { href: "/billing", label: "Billing", icon: Receipt },
       { href: "/inventory", label: "Inventory", icon: Package },
       { href: "/reports", label: "Reports", icon: BarChart3 },
+      { href: "/quality", label: "Quality Metrics", icon: Activity },
       { href: "/hr", label: "HR & Staff", icon: UserCog },
     ],
   },
